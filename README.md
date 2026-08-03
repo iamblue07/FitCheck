@@ -28,7 +28,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 |---|---|---|
 | 1 | Project Foundations & Environment Setup | ✅ Done |
 | 2 | Relational Data Layer | ✅ Done |
-| 3 | Local File Storage | ⬜ Not started |
+| 3 | Cloudflare R2 Storage | ✅ Done |
 | 4 | Authentication | ⬜ Not started |
 | 5 | Profile & Body Photos | ⬜ Not started |
 | 6 | Catalog Data Pipeline | ⬜ Not started |
