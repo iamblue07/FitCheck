@@ -51,6 +51,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - PostgreSQL running locally with `pgvector` compiled and enabled, and a matching Aiven-hosted instance, switchable via environment variables with no code changes.
 - The full schema from `database-schema.md` created via versioned Flyway migrations, applied to both targets.
 - Base JPA entity conventions (`BaseEntity` / `AuditableEntity`) covering id generation and audit timestamps, ready for the first real entities in Chapter 4.
+- Cloudflare R2 Integration for media files.
 
 No REST endpoints exist yet beyond the health check — nothing to hit in Postman until Chapter 4.
 
