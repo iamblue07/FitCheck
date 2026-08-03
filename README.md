@@ -10,15 +10,15 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - A free-text prompt to an AI can generate outfits directly, or refine a single garment within one.
 - Any single garment in an outfit can be swapped for alternatives, manually or via prompt.
 - Liked outfits can be virtually tried on, generating an image of the user wearing them.
-- Outfits can be purchased whole or piece by piece (this feature is deliberately built last, after the frontend exists).
+- Outfits can be purchased whole or piece by piece (this feature is deliberately planned last, after the frontend exists).
 
 ## Tech stack
 
 - **Backend**: Java 21+, Spring Boot 4.1+, Maven
-- **Database**: PostgreSQL 17 with `pgvector` — native install for local dev, [Aiven](https://aiven.io) (free tier) for hosting
+- **Database**: PostgreSQL 18 with `pgvector` — native install for local dev, [Aiven](https://aiven.io) (free tier) for hosting
 - **Migrations**: Flyway
 - **AI**: OpenAI (catalog enrichment, embeddings, prompt-driven outfit generation), [FASHN AI](https://fashn.ai) (virtual try-on)
-- **Storage**: local filesystem — no cloud object storage, no Redis, no Docker; kept deliberately simple for a solo-developer project at this scale
+- **Storage**: Cloudflare R2
 - **Frontend**: Flutter (not started yet)
 - **Dev environment**: Windows, IntelliJ IDEA
 
@@ -70,6 +70,4 @@ Prerequisites: JDK 21+, Maven, PostgreSQL 17 with the `pgvector` extension, Inte
 
 ## Documentation
 
-More detail than belongs in a README:
-- `roadmap.md` — the full chapter-by-chapter build plan, with pass/fail expectations per chapter.
-- `database-schema.md` — complete table/field/relationship reference for the full schema.
+Documentation TBD at a later date
