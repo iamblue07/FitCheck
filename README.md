@@ -29,7 +29,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 1 | Project Foundations & Environment Setup | ✅ Done |
 | 2 | Relational Data Layer | ✅ Done |
 | 3 | Cloudflare R2 Storage | ✅ Done |
-| 4 | Authentication | ⬜ Not started |
+| 4 | Authentication | ✅ Done |
 | 5 | Profile & Body Photos | ⬜ Not started |
 | 6 | Catalog Data Pipeline | ⬜ Not started |
 | 7 | Compatibility Scoring & Candidate Generation | ⬜ Not started |
@@ -52,8 +52,9 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - The full schema from `database-schema.md` created via versioned Flyway migrations, applied to both targets.
 - Base JPA entity conventions (`BaseEntity` / `AuditableEntity`) covering id generation and audit timestamps, ready for the first real entities in Chapter 4.
 - Cloudflare R2 Integration for media files.
+- Authentication & Authorization.
 
-No REST endpoints exist yet beyond the health check — nothing to hit in Postman until Chapter 4.
+
 
 ## Project structure
 
