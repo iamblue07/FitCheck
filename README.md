@@ -18,8 +18,9 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - **Database**: PostgreSQL 18 with `pgvector` — native install for local dev, [Aiven](https://aiven.io) (free tier) for hosting
 - **Migrations**: Flyway
 - **AI**: OpenAI (catalog enrichment, embeddings, prompt-driven outfit generation), [FASHN AI](https://fashn.ai) (virtual try-on)
-- **Storage**: Cloudflare R2
+- **Storage**: Cloudflare R2 (S3-compatible, 10GB free, zero egress) for user photos and generated try-on images
 - **Frontend**: Flutter (not started yet)
+- **Testing**: JUnit 5 + Mockito (automated), Postman (manual)
 - **Dev environment**: Windows, IntelliJ IDEA
 
 ## Status
