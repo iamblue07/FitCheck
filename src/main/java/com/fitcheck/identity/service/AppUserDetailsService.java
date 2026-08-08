@@ -2,19 +2,18 @@ package com.fitcheck.identity.service;
 
 import com.fitcheck.identity.entity.User;
 import com.fitcheck.identity.repository.UserRepository;
+import lombok.AllArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+@AllArgsConstructor
 @Service
 public class AppUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
 
-    public AppUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {

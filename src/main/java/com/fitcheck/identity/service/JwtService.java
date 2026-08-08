@@ -2,6 +2,7 @@ package com.fitcheck.identity.service;
 
 import com.fitcheck.common.security.JwtProperties;
 import com.fitcheck.identity.entity.User;
+import lombok.AllArgsConstructor;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 
+@AllArgsConstructor
 @Service
 public class JwtService {
 
@@ -27,11 +29,6 @@ public class JwtService {
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
     private final SecureRandom secureRandom = new SecureRandom();
-
-    public JwtService(JwtEncoder jwtEncoder, JwtProperties jwtProperties) {
-        this.jwtEncoder = jwtEncoder;
-        this.jwtProperties = jwtProperties;
-    }
 
     public String generateAccessToken(User user) {
         Instant now = Instant.now();

@@ -15,6 +15,7 @@ import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.repository.RefreshTokenRepository;
 import com.fitcheck.identity.repository.UserProfileRepository;
 import com.fitcheck.identity.repository.UserRepository;
+import lombok.AllArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@AllArgsConstructor
 @Service
 public class AuthService {
 
@@ -36,22 +38,6 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
-
-    public AuthService(UserRepository userRepository,
-                       UserProfileRepository userProfileRepository,
-                       RefreshTokenRepository refreshTokenRepository,
-                       PasswordEncoder passwordEncoder,
-                       AuthenticationManager authenticationManager,
-                       JwtService jwtService,
-                       JwtProperties jwtProperties) {
-        this.userRepository = userRepository;
-        this.userProfileRepository = userProfileRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.authenticationManager = authenticationManager;
-        this.jwtService = jwtService;
-        this.jwtProperties = jwtProperties;
-    }
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
