@@ -1,10 +1,11 @@
 package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.BadRequestException;
+import com.fitcheck.common.taxonomy.StyleTagRepository;
 import com.fitcheck.identity.dto.StyleTagResponse;
 import com.fitcheck.identity.dto.UserProfileResponse;
 import com.fitcheck.identity.dto.UserProfileUpdateRequest;
-import com.fitcheck.identity.entity.StyleTag;
+import com.fitcheck.common.taxonomy.StyleTag;
 import com.fitcheck.identity.entity.User;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.entity.UserStylePreference;

@@ -1,6 +1,5 @@
-package com.fitcheck.identity.repository;
+package com.fitcheck.common.taxonomy;
 
-import com.fitcheck.identity.entity.StyleTag;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

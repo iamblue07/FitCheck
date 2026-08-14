@@ -1,8 +1,8 @@
 package com.fitcheck.identity.service;
 
 import com.fitcheck.identity.dto.StyleTagResponse;
-import com.fitcheck.identity.entity.StyleTag;
-import com.fitcheck.identity.repository.StyleTagRepository;
+import com.fitcheck.common.taxonomy.StyleTag;
+import com.fitcheck.common.taxonomy.StyleTagRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

@@ -1,7 +1,7 @@
 package com.fitcheck.identity.service;
 
 import com.fitcheck.identity.dto.StyleTagResponse;
-import com.fitcheck.identity.repository.StyleTagRepository;
+import com.fitcheck.common.taxonomy.StyleTagRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

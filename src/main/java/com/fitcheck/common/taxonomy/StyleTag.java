@@ -1,4 +1,4 @@
-package com.fitcheck.identity.entity;
+package com.fitcheck.common.taxonomy;
 
 import com.fitcheck.common.persistence.BaseEntity;
 import jakarta.persistence.Column;
