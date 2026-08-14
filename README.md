@@ -31,8 +31,8 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 2 | Relational Data Layer | ✅ Done |
 | 3 | Cloudflare R2 Storage | ✅ Done |
 | 4 | Authentication | ✅ Done |
-| 5 | Profile & Body Photos | ⬜ Not started |
-| 6 | Catalog Data Pipeline | ⬜ Not started |
+| 5 | Profile & Body Photos | ✅ Done |
+| 6 | Catalog Data Pipeline | ✅ Done |
 | 7 | Compatibility Scoring & Candidate Generation | ⬜ Not started |
 | 8 | Infinite Scroll Feed | ⬜ Not started |
 | 9 | Garment Alternatives | ⬜ Not started |
@@ -54,6 +54,9 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - Base JPA entity conventions (`BaseEntity` / `AuditableEntity`) covering id generation and audit timestamps, ready for the first real entities in Chapter 4.
 - Cloudflare R2 Integration for media files.
 - Authentication & Authorization.
+- Profile configuration
+- Catalog pipelines for enrichment using Ollama locally and embeddings using OpenAi API.
+ 
 
 
 
