@@ -26,7 +26,7 @@ public class CatalogImportService {
     private static final int BATCH_SIZE = 500;
     private static final List<String> VARIANT_SIZES = List.of("S", "M", "L", "XL");
     private static final int MAX_STOCK_QUANTITY = 50;
-    private static final Random RANDOM = new Random();
+    private  final Random random;
 
     private final CatalogCsvReader catalogCsvReader;
     private final ProductRepository productRepository;
@@ -118,7 +118,7 @@ public class CatalogImportService {
         return ProductVariant.builder()
                 .product(product)
                 .size(size)
-                .stockQuantity(RANDOM.nextInt(MAX_STOCK_QUANTITY + 1))
+                .stockQuantity(random.nextInt(MAX_STOCK_QUANTITY + 1))
                 .build();
     }
 
