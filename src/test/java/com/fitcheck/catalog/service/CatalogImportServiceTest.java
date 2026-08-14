@@ -16,10 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,8 +39,12 @@ class CatalogImportServiceTest {
     @Mock
     private ProductVariantRepository productVariantRepository;
 
+    @Mock
+    private Random random;
+
     @InjectMocks
     private CatalogImportService catalogImportService;
+
 
     private final Path stylesPath = Path.of("styles.csv");
     private final Path imagesPath = Path.of("images.csv");

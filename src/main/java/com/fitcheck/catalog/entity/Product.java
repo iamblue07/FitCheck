@@ -9,6 +9,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.Array;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 
@@ -41,5 +44,13 @@ public class Product extends AuditableEntity {
     private String description;
     private BigDecimal basePrice;
     private String currency;
+    private String occasion;
+    private String primaryColor;
+    private String secondaryColor;
+    private String layeringRole;
+
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Array(length = 3072)
+    private float[] textEmbedding;
 
 }

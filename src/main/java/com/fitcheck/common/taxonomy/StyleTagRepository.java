@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface StyleTagRepository extends JpaRepository<StyleTag, UUID> {
 
     List<StyleTag> findAllById(Iterable<UUID> ids);
+
+    List<StyleTag> findAllByNameIn(List<String> names);
 }
