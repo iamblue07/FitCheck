@@ -15,9 +15,9 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 ## Tech stack
 
 - **Backend**: Java 21+, Spring Boot 4.1+, Maven
-- **Database**: PostgreSQL 18 with `pgvector` — native install for local dev, [Aiven](https://aiven.io) (free tier) for hosting
+- **Database**: PostgreSQL 17 with `pgvector` — native install for local dev, [Aiven](https://aiven.io) (free tier) for hosting
 - **Migrations**: Flyway
-- **AI**: OpenAI (catalog enrichment, embeddings, prompt-driven outfit generation), [FASHN AI](https://fashn.ai) (virtual try-on)
+- **AI**: Ollama running Qwen3-VL 4B locally (catalog enrichment), OpenAI (embeddings, prompt-driven outfit generation), [FASHN AI](https://fashn.ai) (virtual try-on)
 - **Storage**: Cloudflare R2 (S3-compatible, 10GB free, zero egress) for user photos and generated try-on images
 - **Frontend**: Flutter (not started yet)
 - **Testing**: JUnit 5 + Mockito (automated), Postman (manual)
@@ -32,7 +32,8 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 3 | Cloudflare R2 Storage | ✅ Done |
 | 4 | Authentication | ✅ Done |
 | 5 | Profile & Body Photos | ✅ Done |
-| 6 | Catalog Data Pipeline | ✅ Done |
+| 6.1 | Catalog Data Pipeline | ✅ Done |
+| 6.2 | Enrichment & Embeddings | ✅ Done |
 | 7 | Compatibility Scoring & Candidate Generation | ⬜ Not started |
 | 8 | Infinite Scroll Feed | ⬜ Not started |
 | 9 | Garment Alternatives | ⬜ Not started |
@@ -51,14 +52,13 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - Request correlation IDs on every log line via SLF4J's MDC.
 - PostgreSQL running locally with `pgvector` compiled and enabled, and a matching Aiven-hosted instance, switchable via environment variables with no code changes.
 - The full schema from `database-schema.md` created via versioned Flyway migrations, applied to both targets.
-- Base JPA entity conventions (`BaseEntity` / `AuditableEntity`) covering id generation and audit timestamps, ready for the first real entities in Chapter 4.
-- Cloudflare R2 Integration for media files.
-- Authentication & Authorization.
-- Profile configuration
-- Catalog pipelines for enrichment using Ollama locally and embeddings using OpenAi API.
- 
-
-
+- Base JPA entity conventions (`BaseEntity` / `AuditableEntity`) covering id generation and audit timestamps.
+- Cloudflare R2 integration for media files.
+- Authentication & authorization.
+- Profile and body photo management, with style-tag preferences.
+- Catalog data pipeline: full Kaggle dataset import into `products`, with synthetic variant stock generated at the same time.
+- Catalog enrichment: an admin endpoint for single-item manual testing, and an unattended batch runner for working through the rest — both against a local Qwen3-VL 4B model via Ollama.
+- A separate batch pass generating OpenAI embeddings for every enriched product.
 
 ## Project structure
 
@@ -66,12 +66,13 @@ Packages are organized by feature, not by technical layer — `identity`, `catal
 
 ## Getting started
 
-Prerequisites: JDK 21+, Maven, PostgreSQL 17 with the `pgvector` extension, IntelliJ IDEA (recommended).
+Prerequisites: JDK 21+, Maven, PostgreSQL 17 with the `pgvector` extension, [Ollama](https://ollama.com) with `qwen3-vl:4b` pulled (`ollama pull qwen3-vl:4b`), an OpenAI API key, IntelliJ IDEA (recommended).
 
 1. Clone the repo.
-2. Create a `.env.local` file at the project root (untracked) with your local Postgres connection details.
-3. Run the app from IntelliJ, or `mvn spring-boot:run`.
-4. Confirm it's up: `GET http://localhost:8080/actuator/health` should return `{"status":"UP"}`.
+2. Create a `.env.local` file at the project root (untracked) with your local Postgres connection details and your `OPENAI_API_KEY`.
+3. Make sure Ollama is running (check for it in the system tray, or launch it — it does not always survive a reboot reliably on Windows).
+4. Run the app from IntelliJ, or `mvn spring-boot:run`.
+5. Confirm it's up: `GET http://localhost:8080/actuator/health` should return `{"status":"UP"}`.
 
 ## Documentation
 
