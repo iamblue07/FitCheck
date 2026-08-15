@@ -5,6 +5,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,7 +17,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     Optional<Product> findFirstByDescriptionIsNullOrderByCreatedAtAsc();
 
+    Optional<Product> findFirstByDescriptionIsNullAndIdNotInOrderByCreatedAtAsc(Collection<UUID> excludedIds);
+
     long countByDescriptionIsNotNull();
 
     List<Product> findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(Limit limit);
 }
+

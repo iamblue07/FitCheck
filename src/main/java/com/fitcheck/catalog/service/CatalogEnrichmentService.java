@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,24 +32,31 @@ public class CatalogEnrichmentService {
 
     @Transactional
     public Optional<Product> enrichNext() {
+        return peekNext(Set.of()).map(this::enrichOne);
+    }
+
+    public Optional<Product> peekNext(Set<UUID> excludeIds) {
         if (properties.limitEnabled() && productRepository.countByDescriptionIsNotNull() >= properties.maxItems()) {
             return Optional.empty();
         }
+        return excludeIds.isEmpty()
+                ? productRepository.findFirstByDescriptionIsNullOrderByCreatedAtAsc()
+                : productRepository.findFirstByDescriptionIsNullAndIdNotInOrderByCreatedAtAsc(excludeIds);
+    }
 
-        Optional<Product> nextProduct = productRepository.findFirstByDescriptionIsNullOrderByCreatedAtAsc();
-        if (nextProduct.isEmpty()) {
-            return Optional.empty();
-        }
+    public Product enrichOne(Product product) {
+        log.debug("Enriching product {} ({})", product.getId(), product.getProductDisplayName());
 
-        Product product = nextProduct.get();
         ProductEnrichmentResult result = enrichmentService.enrich(product);
 
         applyFields(product, result);
         productRepository.save(product);
         productStyleTagRepository.saveAll(resolveStyleTags(product, result.styleTagNames()));
 
-        return Optional.of(product);
+        log.info("Enriched product {} ({})", product.getId(), product.getProductDisplayName());
+        return product;
     }
+
 
     private void applyFields(Product product, ProductEnrichmentResult result) {
         product.setFit(result.fit());

@@ -8,6 +8,7 @@ import com.fitcheck.common.taxonomy.StyleTagRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
@@ -37,6 +38,7 @@ public class OllamaEnrichmentService implements EnrichmentService {
 
         try {
             return ChatClient.create(ollamaChatModel).prompt()
+                    .options(OllamaChatOptions.builder().disableThinking())
                     .user(user -> user
                             .text(buildPrompt(product, allowedStyleTags))
                             .media(MimeTypeUtils.IMAGE_JPEG, new ByteArrayResource(imageBytes)))
