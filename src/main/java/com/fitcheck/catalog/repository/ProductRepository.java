@@ -22,5 +22,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     long countByDescriptionIsNotNull();
 
     List<Product> findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(Limit limit);
+
+    List<Product> findAllByDescriptionIsNotNullAndTextEmbeddingIsNullAndIdNotIn(Collection<UUID> excludedIds, Limit limit);
+
+    long countByTextEmbeddingIsNotNull();
+
 }
 

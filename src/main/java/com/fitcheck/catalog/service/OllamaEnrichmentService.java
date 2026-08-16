@@ -6,6 +6,7 @@ import com.fitcheck.common.exception.ExternalServiceException;
 import com.fitcheck.common.taxonomy.StyleTag;
 import com.fitcheck.common.taxonomy.StyleTagRepository;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
@@ -20,6 +21,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class OllamaEnrichmentService implements EnrichmentService {

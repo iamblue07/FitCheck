@@ -1,0 +1,1 @@
+ALTER TABLE products ALTER COLUMN text_embedding TYPE vector(2000);

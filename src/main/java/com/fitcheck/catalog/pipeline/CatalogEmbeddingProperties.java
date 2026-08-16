@@ -4,5 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "catalog.embedding")
 public record CatalogEmbeddingProperties(
-        boolean enabled
+        boolean batchEnabled,
+        int maxItems,
+        boolean limitEnabled
 ) {}

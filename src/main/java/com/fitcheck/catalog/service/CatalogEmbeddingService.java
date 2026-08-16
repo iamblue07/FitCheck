@@ -1,6 +1,7 @@
 package com.fitcheck.catalog.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.catalog.pipeline.CatalogEmbeddingProperties;
 import com.fitcheck.catalog.repository.ProductRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,8 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -16,28 +19,20 @@ public class CatalogEmbeddingService {
 
     private static final int BATCH_SIZE = 500;
 
+    private final CatalogEmbeddingProperties properties;
     private final EmbeddingService embeddingService;
     private final ProductRepository productRepository;
 
-    public void embedPending() {
-        int embedded = 0;
-        List<Product> chunk = nextChunk();
-
-        while (!chunk.isEmpty()) {
-            embedChunk(chunk);
-            embedded += chunk.size();
-            chunk = nextChunk();
+    public List<Product> nextChunk(Set<UUID> excludeIds) {
+        if (properties.limitEnabled() && productRepository.countByTextEmbeddingIsNotNull() >= properties.maxItems()) {
+            return List.of();
         }
-
-        log.info("Catalog embedding complete: {} products embedded", embedded);
+        return excludeIds.isEmpty()
+                ? productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(Limit.of(BATCH_SIZE))
+                : productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNullAndIdNotIn(excludeIds, Limit.of(BATCH_SIZE));
     }
 
-    // Deliberately NOT @Transactional — independent per-chunk commits mean a crash
-    // partway through preserves the chunks already saved, and re-running embedPending()
-    // later only re-fetches the rows still missing an embedding. A same-class
-    // @Transactional call wouldn't work here anyway, since Spring's proxy can't
-    // intercept self-invocation.
-    private void embedChunk(List<Product> products) {
+    public void embedChunk(List<Product> products) {
         List<String> descriptions = products.stream().map(Product::getDescription).toList();
         List<float[]> embeddings = embeddingService.embed(descriptions);
 
@@ -46,9 +41,5 @@ public class CatalogEmbeddingService {
         }
 
         productRepository.saveAll(products);
-    }
-
-    private List<Product> nextChunk() {
-        return productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(Limit.of(BATCH_SIZE));
     }
 }

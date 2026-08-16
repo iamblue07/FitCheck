@@ -50,7 +50,7 @@ public class Product extends AuditableEntity {
     private String layeringRole;
 
     @JdbcTypeCode(SqlTypes.VECTOR)
-    @Array(length = 3072)
+    @Array(length = 2000)
     private float[] textEmbedding;
 
 }
