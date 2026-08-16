@@ -1,20 +1,22 @@
+// test/catalog/service/CatalogEmbeddingServiceTest.java
 package com.fitcheck.catalog.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.catalog.pipeline.CatalogEmbeddingProperties;
 import com.fitcheck.catalog.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,50 +29,59 @@ class CatalogEmbeddingServiceTest {
     @Mock
     private ProductRepository productRepository;
 
-    @InjectMocks
-    private CatalogEmbeddingService catalogEmbeddingService;
-
     @Test
-    void embedPending_multipleChunks_repeatsUntilEmpty() {
-        Product first = productWithDescription("a red dress");
-        Product second = productWithDescription("blue jeans");
-
+    void nextChunk_returnsUnembeddedProducts() {
+        CatalogEmbeddingService service = serviceWithProperties(false, 0);
+        Product product = productWithDescription("a red dress");
         when(productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(any()))
-                .thenReturn(List.of(first))
-                .thenReturn(List.of(second))
-                .thenReturn(List.of());
-        when(embeddingService.embed(any())).thenReturn(List.of(new float[]{0.1f}));
+                .thenReturn(List.of(product));
 
-        catalogEmbeddingService.embedPending();
+        List<Product> chunk = service.nextChunk(Set.of());
 
-        verify(productRepository, times(3)).findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(any());
-        verify(productRepository, times(2)).saveAll(any());
+        assertThat(chunk).containsExactly(product);
     }
 
     @Test
-    void embedPending_assignsReturnedVectorToMatchingProduct() {
+    void nextChunk_excludesGivenIds() {
+        CatalogEmbeddingService service = serviceWithProperties(false, 0);
+        UUID excludedId = UUID.randomUUID();
+        when(productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNullAndIdNotIn(eq(Set.of(excludedId)), any()))
+                .thenReturn(List.of());
+
+        List<Product> chunk = service.nextChunk(Set.of(excludedId));
+
+        assertThat(chunk).isEmpty();
+    }
+
+    @Test
+    void nextChunk_limitReached_returnsEmptyWithoutQuerying() {
+        CatalogEmbeddingService service = serviceWithProperties(true, 10);
+        when(productRepository.countByTextEmbeddingIsNotNull()).thenReturn(10L);
+
+        List<Product> chunk = service.nextChunk(Set.of());
+
+        assertThat(chunk).isEmpty();
+        verify(productRepository, never()).findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(any());
+    }
+
+    @Test
+    void embedChunk_assignsReturnedVectorToMatchingProduct() {
+        CatalogEmbeddingService service = serviceWithProperties(false, 0);
         Product product = productWithDescription("a cotton t-shirt");
         float[] vector = new float[]{0.1f, 0.2f, 0.3f};
-
-        when(productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(any()))
-                .thenReturn(List.of(product))
-                .thenReturn(List.of());
         when(embeddingService.embed(List.of("a cotton t-shirt"))).thenReturn(List.of(vector));
 
-        catalogEmbeddingService.embedPending();
+        service.embedChunk(List.of(product));
 
         assertThat(product.getTextEmbedding()).isEqualTo(vector);
         verify(productRepository).saveAll(List.of(product));
     }
 
-    @Test
-    void embedPending_nothingPending_noOp() {
-        when(productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(any())).thenReturn(List.of());
-
-        catalogEmbeddingService.embedPending();
-
-        verify(productRepository, never()).saveAll(any());
-        verify(embeddingService, never()).embed(any());
+    private CatalogEmbeddingService serviceWithProperties(boolean limitEnabled, int maxItems) {
+        return new CatalogEmbeddingService(
+                new CatalogEmbeddingProperties(true, maxItems, limitEnabled, 500),
+                embeddingService,
+                productRepository);
     }
 
     private Product productWithDescription(String description) {

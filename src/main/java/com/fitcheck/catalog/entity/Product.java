@@ -24,6 +24,8 @@ import java.math.BigDecimal;
 @Table(name = "products")
 public class Product extends AuditableEntity {
 
+    public static final int TEXT_EMBEDDING_DIMENSIONS = 2000;
+
     @Column(nullable = false)
     private String externalId;
     private String gender;
@@ -50,7 +52,7 @@ public class Product extends AuditableEntity {
     private String layeringRole;
 
     @JdbcTypeCode(SqlTypes.VECTOR)
-    @Array(length = 2000)
+    @Array(length = TEXT_EMBEDDING_DIMENSIONS)
     private float[] textEmbedding;
 
 }

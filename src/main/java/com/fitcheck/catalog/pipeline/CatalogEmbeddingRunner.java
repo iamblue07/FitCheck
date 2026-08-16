@@ -1,3 +1,4 @@
+// catalog/pipeline/CatalogEmbeddingRunner.java
 package com.fitcheck.catalog.pipeline;
 
 import com.fitcheck.catalog.entity.Product;
@@ -35,18 +36,35 @@ public class CatalogEmbeddingRunner implements CommandLineRunner {
 
         List<Product> chunk = catalogEmbeddingService.nextChunk(failedIds);
         while (!chunk.isEmpty()) {
-            try {
-                catalogEmbeddingService.embedChunk(chunk);
-                embeddedCount += chunk.size();
-                log.info("Embedding progress: {} completed", embeddedCount);
-            } catch (Exception e) {
-                List<UUID> chunkIds = chunk.stream().map(Product::getId).toList();
-                log.error("Failed to embed chunk of {} products — skipping for this run: {}", chunk.size(), chunkIds, e);
-                failedIds.addAll(chunkIds);
-            }
+            embeddedCount += embedWithFallback(chunk, failedIds);
+            log.info("Embedding progress: {} completed, {} failed", embeddedCount, failedIds.size());
             chunk = catalogEmbeddingService.nextChunk(failedIds);
         }
 
         log.info("Catalog embedding complete: {} embedded, {} failed", embeddedCount, failedIds.size());
+    }
+
+    private int embedWithFallback(List<Product> chunk, Set<UUID> failedIds) {
+        try {
+            catalogEmbeddingService.embedChunk(chunk);
+            return chunk.size();
+        } catch (Exception e) {
+            log.warn("Chunk of {} failed as a batch, retrying item by item: {}", chunk.size(), e.getMessage());
+            return embedItemByItem(chunk, failedIds);
+        }
+    }
+
+    private int embedItemByItem(List<Product> chunk, Set<UUID> failedIds) {
+        int succeeded = 0;
+        for (Product product : chunk) {
+            try {
+                catalogEmbeddingService.embedChunk(List.of(product));
+                succeeded++;
+            } catch (Exception e) {
+                log.error("Failed to embed product {}: {}", product.getId(), e.getMessage(), e);
+                failedIds.add(product.getId());
+            }
+        }
+        return succeeded;
     }
 }

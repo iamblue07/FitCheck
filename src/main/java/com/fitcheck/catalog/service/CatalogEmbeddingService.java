@@ -17,8 +17,6 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CatalogEmbeddingService {
 
-    private static final int BATCH_SIZE = 500;
-
     private final CatalogEmbeddingProperties properties;
     private final EmbeddingService embeddingService;
     private final ProductRepository productRepository;
@@ -28,8 +26,8 @@ public class CatalogEmbeddingService {
             return List.of();
         }
         return excludeIds.isEmpty()
-                ? productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(Limit.of(BATCH_SIZE))
-                : productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNullAndIdNotIn(excludeIds, Limit.of(BATCH_SIZE));
+                ? productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNull(Limit.of(properties.chunkSize()))
+                : productRepository.findAllByDescriptionIsNotNullAndTextEmbeddingIsNullAndIdNotIn(excludeIds, Limit.of(properties.chunkSize()));
     }
 
     public void embedChunk(List<Product> products) {

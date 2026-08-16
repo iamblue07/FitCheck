@@ -6,5 +6,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record CatalogEmbeddingProperties(
         boolean batchEnabled,
         int maxItems,
-        boolean limitEnabled
+        boolean limitEnabled,
+        int chunkSize
 ) {}
