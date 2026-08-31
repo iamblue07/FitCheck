@@ -15,9 +15,9 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 ## Tech stack
 
 - **Backend**: Java 21+, Spring Boot 4.1+, Maven
-- **Database**: PostgreSQL 17 with `pgvector` — native install for local dev, [Aiven](https://aiven.io) (free tier) for hosting
+- **Database**: PostgreSQL 17 with `pgvector` — native installation for local dev, [Aiven](https://aiven.io) (free tier) for hosting
 - **Migrations**: Flyway
-- **AI**: Ollama running Qwen3-VL 4B locally (catalog enrichment), OpenAI (embeddings, prompt-driven outfit generation), [FASHN AI](https://fashn.ai) (virtual try-on)
+- **AI**: Ollama running Qwen3-VL 4B locally (catalog enrichment) and Qwen3-Embedding-4B locally (catalog embeddings, MRL-truncated to 2000 dimensions), [FASHN AI](https://fashn.ai) (virtual try-on). OpenAI's starter is on the classpath for Chapter 10's prompt-driven outfit generation but isn't wired to anything yet — every OpenAI model capability is explicitly disabled until that chapter starts.
 - **Storage**: Cloudflare R2 (S3-compatible, 10GB free, zero egress) for user photos and generated try-on images
 - **Frontend**: Flutter (not started yet)
 - **Testing**: JUnit 5 + Mockito (automated), Postman (manual)
@@ -57,8 +57,8 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - Authentication & authorization.
 - Profile and body photo management, with style-tag preferences.
 - Catalog data pipeline: full Kaggle dataset import into `products`, with synthetic variant stock generated at the same time.
-- Catalog enrichment: an admin endpoint for single-item manual testing, and an unattended batch runner for working through the rest — both against a local Qwen3-VL 4B model via Ollama.
-- A separate batch pass generating OpenAI embeddings for every enriched product.
+- Catalog enrichment pipeline: an admin endpoint for single-item manual testing, and an unattended batch runner for working through the rest — both against a local Qwen3-VL 4B model via Ollama.
+- Catalog embeddings pipeline: a separate batch pass generating local embeddings (Qwen3-Embedding-4B via Ollama) for every enriched product, MRL-truncated from its native 2560 dimensions to 2000 and renormalized, with per-item fallback if a batch call fails partway through.
 
 ## Project structure
 
@@ -66,11 +66,11 @@ Packages are organized by feature, not by technical layer — `identity`, `catal
 
 ## Getting started
 
-Prerequisites: JDK 21+, Maven, PostgreSQL 17 with the `pgvector` extension, [Ollama](https://ollama.com) with `qwen3-vl:4b` pulled (`ollama pull qwen3-vl:4b`), an OpenAI API key, IntelliJ IDEA (recommended).
+Prerequisites: JDK 21+, Maven, PostgreSQL 17 with the `pgvector` extension, [Ollama](https://ollama.com) with both `qwen3-vl:4b` and `qwen3-embedding:4b` pulled (`ollama pull qwen3-vl:4b` and `ollama pull qwen3-embedding:4b`), IntelliJ IDEA (recommended). No OpenAI API key needed yet — see the tech stack note above.
 
 1. Clone the repo.
-2. Create a `.env.local` file at the project root (untracked) with your local Postgres connection details and your `OPENAI_API_KEY`.
-3. Make sure Ollama is running (check for it in the system tray, or launch it — it does not always survive a reboot reliably on Windows).
+2. Create a `.env.local` file at the project root (untracked) with your local Postgres connection details, Cloudflare R2 and JWT settings, and the Ollama/catalog batch variables (`OLLAMA_BASE_URL`, `OLLAMA_ENRICHMENT_MODEL`, `OLLAMA_EMBEDDING_MODEL`, `CATALOG_EMBEDDING_CHUNK_SIZE`, and the rest of the `catalog.*` batch settings) — see `application.properties` for the full list of expected variables.
+3. Make sure Ollama is running with both models pulled (check for it in the system tray, or launch it — it does not always survive a reboot reliably on Windows).
 4. Run the app from IntelliJ, or `mvn spring-boot:run`.
 5. Confirm it's up: `GET http://localhost:8080/actuator/health` should return `{"status":"UP"}`.
 
