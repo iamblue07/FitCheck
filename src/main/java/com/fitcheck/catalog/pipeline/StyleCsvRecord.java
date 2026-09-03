@@ -1,7 +1,5 @@
 package com.fitcheck.catalog.pipeline;
 
-import java.math.BigDecimal;
-
 public record StyleCsvRecord (
         String id,
         String gender,

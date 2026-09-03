@@ -12,11 +12,6 @@ import java.util.Random;
 public class CatalogPipelineConfig {
 
     @Bean
-    public Random catalogImportRandom() {
-        return new Random();
-    }
-
-    @Bean
     public HttpClient catalogHttpClient() {
         return HttpClient.newHttpClient();
     }

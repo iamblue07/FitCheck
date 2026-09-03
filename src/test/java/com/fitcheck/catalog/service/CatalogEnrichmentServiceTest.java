@@ -50,7 +50,7 @@ class CatalogEnrichmentServiceTest {
     @Test
     void enrichNext_limitReached_returnsEmpty() {
         when(properties.limitEnabled()).thenReturn(true);
-        when(properties.maxItems()).thenReturn(100L);
+        when(properties.maxItems()).thenReturn(100);
         when(productRepository.countByDescriptionIsNotNull()).thenReturn(100L);
 
         Optional<Product> result = catalogEnrichmentService.enrichNext();

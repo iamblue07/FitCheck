@@ -1,9 +1,8 @@
 package com.fitcheck.catalog.entity;
 
 import com.fitcheck.common.persistence.AuditableEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
+import com.fitcheck.common.taxonomy.GarmentRole;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -50,6 +49,9 @@ public class Product extends AuditableEntity {
     private String primaryColor;
     private String secondaryColor;
     private String layeringRole;
+
+    @Enumerated(EnumType.STRING)
+    private GarmentRole garmentRole;
 
     @JdbcTypeCode(SqlTypes.VECTOR)
     @Array(length = TEXT_EMBEDDING_DIMENSIONS)

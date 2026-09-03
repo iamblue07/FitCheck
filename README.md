@@ -15,7 +15,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 ## Tech stack
 
 - **Backend**: Java 21+, Spring Boot 4.1+, Maven
-- **Database**: PostgreSQL 17 with `pgvector` — native installation for local dev, [Aiven](https://aiven.io) (free tier) for hosting
+- **Database**: PostgreSQL 18 with `pgvector` — native installation for local dev, [Aiven](https://aiven.io) (free tier) for hosting; nearest-neighbor candidate retrieval via Spring Data JPA's native vector-search support (`Vector`/`ScoringFunction`/`SearchResults`) as of Chapter 7, backed by an HNSW index on `products.text_embedding`
 - **Migrations**: Flyway
 - **AI**: Ollama running Qwen3-VL 4B locally (catalog enrichment) and Qwen3-Embedding-4B locally (catalog embeddings, MRL-truncated to 2000 dimensions), [FASHN AI](https://fashn.ai) (virtual try-on). OpenAI's starter is on the classpath for Chapter 10's prompt-driven outfit generation but isn't wired to anything yet — every OpenAI model capability is explicitly disabled until that chapter starts.
 - **Storage**: Cloudflare R2 (S3-compatible, 10GB free, zero egress) for user photos and generated try-on images
@@ -34,7 +34,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 5 | Profile & Body Photos | ✅ Done |
 | 6.1 | Catalog Data Pipeline | ✅ Done |
 | 6.2 | Enrichment & Embeddings | ✅ Done |
-| 7 | Compatibility Scoring & Candidate Generation | ⬜ Not started |
+| 7 | Compatibility Scoring & Candidate Generation | ✅ Done  |
 | 8 | Infinite Scroll Feed | ⬜ Not started |
 | 9 | Garment Alternatives | ⬜ Not started |
 | 10 | Prompt-to-Outfit & Prompt-to-Garment-Refinement | ⬜ Not started |
@@ -59,6 +59,13 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - Catalog data pipeline: full Kaggle dataset import into `products`, with synthetic variant stock generated at the same time.
 - Catalog enrichment pipeline: an admin endpoint for single-item manual testing, and an unattended batch runner for working through the rest — both against a local Qwen3-VL 4B model via Ollama.
 - Catalog embeddings pipeline: a separate batch pass generating local embeddings (Qwen3-Embedding-4B via Ollama) for every enriched product, MRL-truncated from its native 2560 dimensions to 2000 and renormalized, with per-item fallback if a batch call fails partway through.
+- Deterministic garment-role classification (`GarmentRoleResolver`), keyed on `article_type` alone and verified against all 142 real values in the catalog, applied to existing products via a paginated, idempotent backfill runner.
+- First `outfit` package entities (`Outfit`, `OutfitItem`) and repositories, plus two new vector-search repository methods on `ProductRepository`.
+- `OutfitCompatibilityScorer`: a weighted, explainable compatibility score combining structured color/layering rules with embedding similarity, returned as a full breakdown rather than a bare number.
+- `OutfitCandidateGenerator`: beam-search candidate assembly (not plain greedy) with centroid-based nearest-neighbor retrieval and a local-search polish pass, backed by a dedicated, concurrency-safe `OutfitPersistenceService`.
+- Automated test coverage for all chapters, pure Mockito unit tests with no Spring context needed.
+
+Chapter 7's one remaining piece: a debug-only, property-gated runner for exercising the generator against real profile shapes — not built yet.
 
 ## Project structure
 
