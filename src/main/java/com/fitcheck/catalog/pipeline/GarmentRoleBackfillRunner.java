@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.config.GarmentRoleBackfillProperties;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.repository.ProductRepository;
 import com.fitcheck.common.taxonomy.GarmentRole;

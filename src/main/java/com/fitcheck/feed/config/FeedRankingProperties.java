@@ -1,4 +1,4 @@
-package com.fitcheck.feed.service;
+package com.fitcheck.feed.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

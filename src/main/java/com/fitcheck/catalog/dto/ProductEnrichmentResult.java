@@ -1,4 +1,4 @@
-package com.fitcheck.catalog.pipeline;
+package com.fitcheck.catalog.dto;
 
 import java.math.BigDecimal;
 import java.util.List;

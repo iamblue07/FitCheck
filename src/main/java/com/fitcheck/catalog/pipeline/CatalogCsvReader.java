@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.dto.StyleCsvRecord;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;

@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.config.CatalogImportProperties;
 import com.fitcheck.catalog.service.CatalogImportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

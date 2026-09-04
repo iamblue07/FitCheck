@@ -1,5 +1,6 @@
 package com.fitcheck.feed.service;
 
+import com.fitcheck.feed.config.FeedProperties;
 import com.fitcheck.feed.dto.FeedCursor;
 import com.fitcheck.feed.dto.FeedPage;
 import com.fitcheck.feed.entity.FeedEntry;

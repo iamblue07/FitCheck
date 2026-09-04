@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.config.CatalogEnrichmentProperties;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.service.CatalogEnrichmentService;
 import lombok.AllArgsConstructor;

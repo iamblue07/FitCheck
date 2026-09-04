@@ -1,6 +1,7 @@
 package com.fitcheck.feed.service;
 
 import com.fitcheck.catalog.service.ProductStyleTagQueryService;
+import com.fitcheck.feed.config.FeedRankingProperties;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;

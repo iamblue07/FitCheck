@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.dto.StyleCsvRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -2,6 +2,7 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;

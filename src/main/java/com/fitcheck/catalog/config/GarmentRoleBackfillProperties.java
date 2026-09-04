@@ -1,4 +1,4 @@
-package com.fitcheck.catalog.pipeline;
+package com.fitcheck.catalog.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

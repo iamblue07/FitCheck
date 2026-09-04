@@ -7,6 +7,7 @@ import com.fitcheck.common.taxonomy.GarmentRole;
 import com.fitcheck.identity.entity.Sex;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
+import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
 import com.fitcheck.outfit.entity.Outfit;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

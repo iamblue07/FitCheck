@@ -4,7 +4,7 @@ import com.fitcheck.feed.dto.FeedItemResponse;
 import com.fitcheck.feed.dto.FeedPage;
 import com.fitcheck.feed.dto.FeedResponse;
 import com.fitcheck.feed.service.FeedGenerationService;
-import com.fitcheck.feed.service.FeedProperties;
+import com.fitcheck.feed.config.FeedProperties;
 import com.fitcheck.feed.service.FeedResponseAssembler;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;

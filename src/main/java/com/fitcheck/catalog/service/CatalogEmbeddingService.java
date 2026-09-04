@@ -1,7 +1,7 @@
 package com.fitcheck.catalog.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.catalog.pipeline.CatalogEmbeddingProperties;
+import com.fitcheck.catalog.config.CatalogEmbeddingProperties;
 import com.fitcheck.catalog.repository.ProductRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

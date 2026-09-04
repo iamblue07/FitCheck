@@ -1,6 +1,7 @@
 // catalog/pipeline/CatalogEmbeddingRunner.java
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.config.CatalogEmbeddingProperties;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.service.CatalogEmbeddingService;
 import lombok.AllArgsConstructor;

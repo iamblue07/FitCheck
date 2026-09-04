@@ -1,4 +1,4 @@
-package com.fitcheck.catalog.pipeline;
+package com.fitcheck.catalog.dto;
 
 public record StyleCsvRecord (
         String id,

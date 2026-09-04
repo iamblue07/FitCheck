@@ -3,7 +3,7 @@ package com.fitcheck.catalog.service;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.entity.ProductVariant;
 import com.fitcheck.catalog.pipeline.CatalogCsvReader;
-import com.fitcheck.catalog.pipeline.StyleCsvRecord;
+import com.fitcheck.catalog.dto.StyleCsvRecord;
 import com.fitcheck.catalog.repository.ProductRepository;
 import com.fitcheck.catalog.repository.ProductVariantRepository;
 import lombok.AllArgsConstructor;

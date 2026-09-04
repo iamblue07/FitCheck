@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.pipeline;
 
+import com.fitcheck.catalog.config.CatalogImportProperties;
 import com.fitcheck.catalog.service.CatalogImportService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

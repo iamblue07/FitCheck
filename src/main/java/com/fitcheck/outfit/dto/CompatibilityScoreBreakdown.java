@@ -1,4 +1,4 @@
-package com.fitcheck.outfit.service;
+package com.fitcheck.outfit.dto;
 
 import java.math.BigDecimal;
 
