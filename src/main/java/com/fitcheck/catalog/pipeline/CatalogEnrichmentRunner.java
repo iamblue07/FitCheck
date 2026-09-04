@@ -5,6 +5,7 @@ import com.fitcheck.catalog.service.CatalogEnrichmentService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -15,6 +16,7 @@ import java.util.UUID;
 @Slf4j
 @Component
 @AllArgsConstructor
+@ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "ollama", matchIfMissing = true)
 public class CatalogEnrichmentRunner implements CommandLineRunner {
 
     private final CatalogEnrichmentProperties properties;

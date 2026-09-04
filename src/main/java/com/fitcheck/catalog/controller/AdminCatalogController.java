@@ -4,6 +4,7 @@ import com.fitcheck.catalog.dto.EnrichmentTriggerResponse;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.service.CatalogEnrichmentService;
 import lombok.AllArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,6 +15,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/admin/catalog")
 @AllArgsConstructor
+@ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "ollama", matchIfMissing = true)
 public class AdminCatalogController {
 
     private final CatalogEnrichmentService catalogEnrichmentService;

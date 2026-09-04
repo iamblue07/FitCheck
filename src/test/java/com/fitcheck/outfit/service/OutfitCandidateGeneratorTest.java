@@ -1,12 +1,12 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.catalog.repository.ProductRepository;
-import com.fitcheck.catalog.repository.ProductStyleTagRepository;
+import com.fitcheck.catalog.service.ProductSearchService;
+import com.fitcheck.catalog.service.ProductStyleTagQueryService;
 import com.fitcheck.common.taxonomy.GarmentRole;
 import com.fitcheck.identity.entity.Sex;
 import com.fitcheck.identity.entity.UserProfile;
-import com.fitcheck.identity.repository.UserStylePreferenceRepository;
+import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,13 +44,13 @@ class OutfitCandidateGeneratorTest {
     private static final Clock SUMMER_CLOCK = Clock.fixed(Instant.parse("2026-07-15T00:00:00Z"), ZoneOffset.UTC);
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductSearchService productSearchService;
 
     @Mock
-    private ProductStyleTagRepository productStyleTagRepository;
+    private ProductStyleTagQueryService productStyleTagQueryService;
 
     @Mock
-    private UserStylePreferenceRepository userStylePreferenceRepository;
+    private UserStylePreferenceQueryService userStylePreferenceQueryService;
 
     @Mock
     private OutfitPersistenceService outfitPersistenceService;
@@ -61,7 +61,7 @@ class OutfitCandidateGeneratorTest {
     void setUp() {
         scorer = new OutfitCompatibilityScorer(
                 new OutfitCompatibilityProperties(new BigDecimal("0.5"), new BigDecimal("0.5")));
-        lenient().when(userStylePreferenceRepository.findAllByUserId(any())).thenReturn(List.of());
+        lenient().when(userStylePreferenceQueryService.findPreferredStyleTagIds(any())).thenReturn(Set.of());
         lenient().when(outfitPersistenceService.saveNew(any(), any(), any()))
                 .thenAnswer(invocation -> Outfit.builder()
                         .id(UUID.randomUUID())
@@ -186,8 +186,7 @@ class OutfitCandidateGeneratorTest {
         generator.generate(profile);
 
         ArgumentCaptor<BigDecimal> priceCaptor = ArgumentCaptor.forClass(BigDecimal.class);
-        verify(productRepository).findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(
-                eq(GarmentRole.TOP), any(), priceCaptor.capture());
+        verify(productSearchService).findEligible(eq(GarmentRole.TOP), any(), priceCaptor.capture());
         assertThat(priceCaptor.getValue()).isGreaterThan(new BigDecimal("100000"));
     }
 
@@ -202,8 +201,7 @@ class OutfitCandidateGeneratorTest {
         generator.generate(profile);
 
         ArgumentCaptor<Set<String>> gendersCaptor = ArgumentCaptor.forClass(Set.class);
-        verify(productRepository).findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(
-                eq(GarmentRole.TOP), gendersCaptor.capture(), any());
+        verify(productSearchService).findEligible(eq(GarmentRole.TOP), gendersCaptor.capture(), any());
         assertThat(gendersCaptor.getValue()).containsExactlyInAnyOrder("Men", "Unisex");
     }
 
@@ -211,24 +209,24 @@ class OutfitCandidateGeneratorTest {
         OutfitGenerationProperties properties = new OutfitGenerationProperties(
                 batchSize, maxAttempts, new BigDecimal("0.10"), topKPerSlot, 2);
         return new OutfitCandidateGenerator(
-                productRepository, productStyleTagRepository, userStylePreferenceRepository,
+                productSearchService, productStyleTagQueryService, userStylePreferenceQueryService,
                 outfitPersistenceService, scorer, properties, new Random(42), SUMMER_CLOCK);
     }
 
     private void stubAnchorPools(List<Product> topPool, List<Product> fullBodyPool) {
-        lenient().when(productRepository.findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(eq(GarmentRole.TOP), any(), any()))
+        lenient().when(productSearchService.findEligible(eq(GarmentRole.TOP), any(), any()))
                 .thenReturn(topPool);
-        lenient().when(productRepository.findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(eq(GarmentRole.FULL_BODY), any(), any()))
+        lenient().when(productSearchService.findEligible(eq(GarmentRole.FULL_BODY), any(), any()))
                 .thenReturn(fullBodyPool);
     }
 
     private void stubSlotCandidates(GarmentRole role, List<Product> candidates) {
         SearchResults<Product> results = new SearchResults<>(
                 candidates.stream().map(p -> new SearchResult<>(p, 1.0)).toList());
-        lenient().when(productRepository.searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndOccasionAndTextEmbeddingNear(
+        lenient().when(productSearchService.findNearestByOccasion(
                         eq(role), any(), any(), any(), any(), any(), any()))
                 .thenReturn(results);
-        lenient().when(productRepository.searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndTextEmbeddingNear(
+        lenient().when(productSearchService.findNearest(
                         eq(role), any(), any(), any(), any(), any()))
                 .thenReturn(results);
     }

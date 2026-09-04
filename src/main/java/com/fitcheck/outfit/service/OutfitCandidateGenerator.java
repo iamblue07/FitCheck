@@ -1,12 +1,12 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.catalog.repository.ProductRepository;
-import com.fitcheck.catalog.repository.ProductStyleTagRepository;
+import com.fitcheck.catalog.service.ProductSearchService;
+import com.fitcheck.catalog.service.ProductStyleTagQueryService;
 import com.fitcheck.common.taxonomy.GarmentRole;
 import com.fitcheck.identity.entity.Sex;
 import com.fitcheck.identity.entity.UserProfile;
-import com.fitcheck.identity.repository.UserStylePreferenceRepository;
+import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,9 +60,9 @@ public class OutfitCandidateGenerator {
     private static final Set<Month> OUTERWEAR_MONTHS = EnumSet.of(
             Month.OCTOBER, Month.NOVEMBER, Month.DECEMBER, Month.JANUARY, Month.FEBRUARY, Month.MARCH);
 
-    private final ProductRepository productRepository;
-    private final ProductStyleTagRepository productStyleTagRepository;
-    private final UserStylePreferenceRepository userStylePreferenceRepository;
+    private final ProductSearchService productSearchService;
+    private final ProductStyleTagQueryService productStyleTagQueryService;
+    private final UserStylePreferenceQueryService userStylePreferenceQueryService;
     private final OutfitPersistenceService outfitPersistenceService;
     private final OutfitCompatibilityScorer compatibilityScorer;
     private final OutfitGenerationProperties properties;
@@ -74,10 +74,8 @@ public class OutfitCandidateGenerator {
         Set<String> genders = resolveGenders(profile.getSex());
         BigDecimal priceCeiling = resolvePriceCeiling(profile.getAverageBudgetPerOutfit());
 
-        List<Product> topPool = productRepository.findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(
-                GarmentRole.TOP, genders, priceCeiling);
-        List<Product> fullBodyPool = productRepository.findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(
-                GarmentRole.FULL_BODY, genders, priceCeiling);
+        List<Product> topPool = productSearchService.findEligible(GarmentRole.TOP, genders, priceCeiling);
+        List<Product> fullBodyPool = productSearchService.findEligible(GarmentRole.FULL_BODY, genders, priceCeiling);
         Set<UUID> preferredProductIds = resolvePreferredProductIds(profile.getUserId());
 
         GenerationContext context = new GenerationContext(
@@ -99,13 +97,11 @@ public class OutfitCandidateGenerator {
     }
 
     private Set<UUID> resolvePreferredProductIds(UUID userId) {
-        Set<UUID> preferredStyleTagIds = userStylePreferenceRepository.findAllByUserId(userId).stream()
-                .map(pref -> pref.getStyleTag().getId())
-                .collect(Collectors.toSet());
+        Set<UUID> preferredStyleTagIds = userStylePreferenceQueryService.findPreferredStyleTagIds(userId);
         if (preferredStyleTagIds.isEmpty()) {
             return Set.of();
         }
-        return Set.copyOf(productStyleTagRepository.findDistinctProductIdByStyleTagIdIn(preferredStyleTagIds));
+        return Set.copyOf(productStyleTagQueryService.findProductIdsByStyleTagIds(preferredStyleTagIds));
     }
 
     private Set<String> resolveGenders(Sex sex) {
@@ -228,17 +224,15 @@ public class OutfitCandidateGenerator {
                                               Vector referenceVector, String occasion) {
         Limit limit = Limit.of(properties.topKPerSlot());
 
-        SearchResults<Product> withOccasion = productRepository
-                .searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndOccasionAndTextEmbeddingNear(
-                        role, genders, priceCeiling, occasion, referenceVector, ScoringFunction.cosine(), limit);
+        SearchResults<Product> withOccasion = productSearchService.findNearestByOccasion(
+                role, genders, priceCeiling, occasion, referenceVector, ScoringFunction.cosine(), limit);
         List<Product> candidates = extractProducts(withOccasion);
         if (!candidates.isEmpty()) {
             return candidates;
         }
 
-        SearchResults<Product> withoutOccasion = productRepository
-                .searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndTextEmbeddingNear(
-                        role, genders, priceCeiling, referenceVector, ScoringFunction.cosine(), limit);
+        SearchResults<Product> withoutOccasion = productSearchService.findNearest(
+                role, genders, priceCeiling, referenceVector, ScoringFunction.cosine(), limit);
         return extractProducts(withoutOccasion);
     }
 
@@ -337,7 +331,7 @@ public class OutfitCandidateGenerator {
         }
 
         try {
-            return outfitPersistenceService.saveNew(selected, breakdown.finalScore(), itemSetHash);
+            return outfitPersistenceService.saveNew(selected, breakdown, itemSetHash);
         } catch (DataIntegrityViolationException e) {
             return outfitPersistenceService.findExisting(itemSetHash)
                     .orElseThrow(() -> new IllegalStateException(

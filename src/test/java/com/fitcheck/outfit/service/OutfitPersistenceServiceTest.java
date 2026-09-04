@@ -53,10 +53,18 @@ class OutfitPersistenceServiceTest {
         Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
         when(outfitRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Outfit result = service.saveNew(List.of(product), new BigDecimal("0.8765"), "abc123");
+        CompatibilityScoreBreakdown breakdown = new CompatibilityScoreBreakdown(
+                new BigDecimal("0.9"), new BigDecimal("0.8"), new BigDecimal("0.85"),
+                new BigDecimal("0.9"), new BigDecimal("0.8765"));
+
+        Outfit result = service.saveNew(List.of(product), breakdown, "abc123");
 
         assertThat(result.getSource()).isEqualTo(OutfitSource.PROFILE_GENERATED);
         assertThat(result.getCompatibilityScore()).isEqualByComparingTo("0.8765");
+        assertThat(result.getColorScore()).isEqualByComparingTo("0.9");
+        assertThat(result.getLayeringScore()).isEqualByComparingTo("0.8");
+        assertThat(result.getStructuredScore()).isEqualByComparingTo("0.85");
+        assertThat(result.getEmbeddingScore()).isEqualByComparingTo("0.9");
         assertThat(result.getItemSetHash()).isEqualTo("abc123");
     }
 
@@ -66,7 +74,11 @@ class OutfitPersistenceServiceTest {
         Product footwear = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.FOOTWEAR).build();
         when(outfitRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.saveNew(List.of(top, footwear), new BigDecimal("0.5"), "hash");
+        CompatibilityScoreBreakdown breakdown = new CompatibilityScoreBreakdown(
+                new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("0.5"),
+                new BigDecimal("0.5"), new BigDecimal("0.5"));
+
+        service.saveNew(List.of(top, footwear), breakdown, "hash");
 
         ArgumentCaptor<List<OutfitItem>> captor = ArgumentCaptor.forClass(List.class);
         verify(outfitItemRepository).saveAll(captor.capture());

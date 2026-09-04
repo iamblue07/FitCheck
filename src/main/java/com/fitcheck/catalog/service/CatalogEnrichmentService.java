@@ -10,6 +10,7 @@ import com.fitcheck.common.taxonomy.StyleTag;
 import com.fitcheck.common.taxonomy.StyleTagRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @AllArgsConstructor
+@ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "ollama", matchIfMissing = true)
 public class CatalogEnrichmentService {
 
     private final EnrichmentService enrichmentService;

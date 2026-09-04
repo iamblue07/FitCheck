@@ -6,6 +6,7 @@ import com.fitcheck.catalog.service.CatalogEmbeddingService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ import java.util.UUID;
 @Component
 @AllArgsConstructor
 @EnableConfigurationProperties(CatalogEmbeddingProperties.class)
+@ConditionalOnProperty(name = "spring.ai.model.embedding", havingValue = "ollama", matchIfMissing = true)
 public class CatalogEmbeddingRunner implements CommandLineRunner {
 
     private final CatalogEmbeddingProperties properties;

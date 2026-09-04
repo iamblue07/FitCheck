@@ -5,6 +5,7 @@ import com.fitcheck.catalog.pipeline.CatalogEmbeddingProperties;
 import com.fitcheck.catalog.repository.ProductRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @AllArgsConstructor
+@ConditionalOnProperty(name = "spring.ai.model.embedding", havingValue = "ollama", matchIfMissing = true)
 public class CatalogEmbeddingService {
 
     private final CatalogEmbeddingProperties properties;

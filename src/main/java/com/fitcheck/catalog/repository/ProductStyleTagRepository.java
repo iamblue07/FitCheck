@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface ProductStyleTagRepository extends JpaRepository<ProductStyleTag, UUID> {
 
     List<UUID> findDistinctProductIdByStyleTagIdIn(Collection<UUID> styleTagIds);
+
+    List<UUID> findDistinctStyleTagIdByProductIdIn(Collection<UUID> productIds);
 }

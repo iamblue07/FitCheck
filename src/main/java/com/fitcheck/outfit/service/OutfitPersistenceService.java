@@ -10,7 +10,6 @@ import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -27,10 +26,14 @@ public class OutfitPersistenceService {
     }
 
     @Transactional
-    public Outfit saveNew(List<Product> selected, BigDecimal compatibilityScore, String itemSetHash) {
+    public Outfit saveNew(List<Product> selected, CompatibilityScoreBreakdown breakdown, String itemSetHash) {
         Outfit outfit = Outfit.builder()
                 .source(OutfitSource.PROFILE_GENERATED)
-                .compatibilityScore(compatibilityScore)
+                .compatibilityScore(breakdown.finalScore())
+                .colorScore(breakdown.colorScore())
+                .layeringScore(breakdown.layeringScore())
+                .structuredScore(breakdown.structuredScore())
+                .embeddingScore(breakdown.embeddingScore())
                 .itemSetHash(itemSetHash)
                 .build();
         outfit = outfitRepository.saveAndFlush(outfit);
