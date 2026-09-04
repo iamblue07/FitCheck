@@ -34,8 +34,8 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 5 | Profile & Body Photos | ✅ Done |
 | 6.1 | Catalog Data Pipeline | ✅ Done |
 | 6.2 | Enrichment & Embeddings | ✅ Done |
-| 7 | Compatibility Scoring & Candidate Generation | ✅ Done  |
-| 8 | Infinite Scroll Feed | ⬜ Not started |
+| 7 | Compatibility Scoring & Candidate Generation | ✅ Done |
+| 8 | Infinite Scroll Feed | ✅ Done |
 | 9 | Garment Alternatives | ⬜ Not started |
 | 10 | Prompt-to-Outfit & Prompt-to-Garment-Refinement | ⬜ Not started |
 | 11 | FASHN AI Integration & Async Job Pipeline | ⬜ Not started |
@@ -49,9 +49,9 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 
 - Feature-based package skeleton (`identity`, `catalog`, `outfit`, `feed`, `tryon`, `commerce`, `common`).
 - Shared exception hierarchy (`AppException` and subtypes), a consistent JSON error shape, and a global exception handler.
-- Request correlation IDs on every log line via SLF4J's MDC.
+- Request correlation IDs on every log line via SLF4J's MDC, including on background thread pools via a reusable `MdcTaskDecorator`.
 - PostgreSQL running locally with `pgvector` compiled and enabled, and a matching Aiven-hosted instance, switchable via environment variables with no code changes.
-- The full schema from `database-schema.md` created via versioned Flyway migrations, applied to both targets.
+- The full schema from `database-schema.md` created via versioned Flyway migrations (currently at V12), applied to both targets.
 - Base JPA entity conventions (`BaseEntity` / `AuditableEntity`) covering id generation and audit timestamps.
 - Cloudflare R2 integration for media files.
 - Authentication & authorization.
@@ -60,16 +60,17 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - Catalog enrichment pipeline: an admin endpoint for single-item manual testing, and an unattended batch runner for working through the rest — both against a local Qwen3-VL 4B model via Ollama.
 - Catalog embeddings pipeline: a separate batch pass generating local embeddings (Qwen3-Embedding-4B via Ollama) for every enriched product, MRL-truncated from its native 2560 dimensions to 2000 and renormalized, with per-item fallback if a batch call fails partway through.
 - Deterministic garment-role classification (`GarmentRoleResolver`), keyed on `article_type` alone and verified against all 142 real values in the catalog, applied to existing products via a paginated, idempotent backfill runner.
-- First `outfit` package entities (`Outfit`, `OutfitItem`) and repositories, plus two new vector-search repository methods on `ProductRepository`.
-- `OutfitCompatibilityScorer`: a weighted, explainable compatibility score combining structured color/layering rules with embedding similarity, returned as a full breakdown rather than a bare number.
+- `outfit` package entities (`Outfit`, `OutfitItem`) and repositories, plus vector-search repository methods on `ProductRepository`.
+- `OutfitCompatibilityScorer`: a weighted, explainable compatibility score combining structured color/layering rules with embedding similarity, returned as a full breakdown (and, as of Chapter 8, persisted in full — every component, not just the blended value).
 - `OutfitCandidateGenerator`: beam-search candidate assembly (not plain greedy) with centroid-based nearest-neighbor retrieval and a local-search polish pass, backed by a dedicated, concurrency-safe `OutfitPersistenceService`.
-- Automated test coverage for all chapters, pure Mockito unit tests with no Spring context needed.
+- `GET /api/v1/feed`: cursor-paginated, personalized outfit feed. Ranking is a bounded multiplier on the outfit's own compatibility score (so an unvalidated personalization signal can never outrank the validated one), never-repeat is enforced by a real database constraint, and a background refill keeps the feed topped up without ever blocking the request that triggered it.
+- A cross-feature query-facade pattern (`catalog.service.ProductSearchService`, `identity.service.UserProfileQueryService`, and others) so features read each other's data through a narrow, owned contract instead of reaching into each other's repositories directly.
+- Automated test coverage for every chapter, pure Mockito unit tests with no Spring context needed — including concurrency-safe tests for the feed's in-memory refill guard (real thread contention via `CountDownLatch`, not just sequential calls).
 
-Chapter 7's one remaining piece: a debug-only, property-gated runner for exercising the generator against real profile shapes — not built yet.
 
 ## Project structure
 
-Packages are organized by feature, not by technical layer — `identity`, `catalog`, `outfit`, `feed`, `tryon`, `commerce`, plus `common` for cross-cutting code. Each feature package holds its own controller/DTO/entity/repository/service classes internally. This was a deliberate choice over the more common controller/service/repository top-level split, given the number of distinct feature areas in this project.
+Packages are organized by feature, not by technical layer — `identity`, `catalog`, `outfit`, `feed`, `tryon`, `commerce`, plus `common` for cross-cutting code. Each feature package holds its own controller/DTO/entity/repository/service classes internally. This was a deliberate choice over the more common controller/service/repository top-level split, given the number of distinct feature areas in this project. Cross-feature reads go through a narrow query-facade service owned by the feature whose data it exposes (e.g. `catalog.service.ProductSearchService`) rather than one feature injecting another's repository directly.
 
 ## Getting started
 
@@ -80,7 +81,3 @@ Prerequisites: JDK 21+, Maven, PostgreSQL 17 with the `pgvector` extension, [Oll
 3. Make sure Ollama is running with both models pulled (check for it in the system tray, or launch it — it does not always survive a reboot reliably on Windows).
 4. Run the app from IntelliJ, or `mvn spring-boot:run`.
 5. Confirm it's up: `GET http://localhost:8080/actuator/health` should return `{"status":"UP"}`.
-
-## Documentation
-
-Documentation TBD at a later date
