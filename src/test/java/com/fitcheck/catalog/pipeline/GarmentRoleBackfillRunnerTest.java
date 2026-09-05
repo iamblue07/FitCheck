@@ -15,10 +15,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,7 +42,7 @@ class GarmentRoleBackfillRunnerTest {
     }
 
     @Test
-    void run_resolvableProduct_assignsRoleAndSavesOnlyThatProduct() {
+    void run_resolvableProduct_updatesOnlyThatProductsRole() {
         GarmentRoleBackfillRunner runner = runnerWithProperties(true);
         Product product = productWithArticleType("Tshirts");
 
@@ -53,12 +53,11 @@ class GarmentRoleBackfillRunnerTest {
 
         runner.run();
 
-        assertThat(product.getGarmentRole()).isEqualTo(GarmentRole.TOP);
-        verify(productRepository).saveAll(List.of(product));
+        verify(productRepository).updateGarmentRoleByIdIn(GarmentRole.TOP, List.of(product.getId()));
     }
 
     @Test
-    void run_unresolvableProduct_isNotSavedAndIsExcludedFromNextPage() {
+    void run_unresolvableProduct_neverUpdatesRoleAndIsExcludedFromNextPage() {
         GarmentRoleBackfillRunner runner = runnerWithProperties(true);
         Product unresolved = productWithArticleType("Socks");
 
@@ -70,12 +69,11 @@ class GarmentRoleBackfillRunnerTest {
 
         runner.run();
 
-        assertThat(unresolved.getGarmentRole()).isNull();
-        verify(productRepository).saveAll(List.of());
+        verify(productRepository, never()).updateGarmentRoleByIdIn(any(), any());
     }
 
     @Test
-    void run_mixOfResolvableAndUnresolvable_savesOnlyResolvedAcrossMultiplePages() {
+    void run_mixOfResolvableAndUnresolvable_updatesOnlyTheResolvedProductsRole() {
         GarmentRoleBackfillRunner runner = runnerWithProperties(true);
         Product resolved = productWithArticleType("Jeans");
         Product unresolved = productWithArticleType("Socks");
@@ -89,9 +87,7 @@ class GarmentRoleBackfillRunnerTest {
 
         runner.run();
 
-        assertThat(resolved.getGarmentRole()).isEqualTo(GarmentRole.BOTTOM);
-        assertThat(unresolved.getGarmentRole()).isNull();
-        verify(productRepository).saveAll(List.of(resolved));
+        verify(productRepository).updateGarmentRoleByIdIn(GarmentRole.BOTTOM, List.of(resolved.getId()));
     }
 
     private GarmentRoleBackfillRunner runnerWithProperties(boolean enabled) {

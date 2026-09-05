@@ -16,10 +16,17 @@ public interface FeedEntryRepository extends JpaRepository<FeedEntry, UUID> {
 
     long countByUserIdAndShownAtIsNull(UUID userId);
 
-    List<FeedEntry> findByUserIdAndShownAtIsNullOrderByRankScoreDescIdDesc(UUID userId, Limit limit);
+    @Query("""
+            SELECT f FROM FeedEntry f
+            JOIN FETCH f.outfit
+            WHERE f.user.id = :userId AND f.shownAt IS NULL
+            ORDER BY f.rankScore DESC, f.id DESC
+            """)
+    List<FeedEntry> findByUserIdAndShownAtIsNullOrderByRankScoreDescIdDesc(@Param("userId") UUID userId, Limit limit);
 
     @Query("""
             SELECT f FROM FeedEntry f
+            JOIN FETCH f.outfit
             WHERE f.user.id = :userId AND f.shownAt IS NULL
             AND (f.rankScore < :cursorScore OR (f.rankScore = :cursorScore AND f.id < :cursorId))
             ORDER BY f.rankScore DESC, f.id DESC

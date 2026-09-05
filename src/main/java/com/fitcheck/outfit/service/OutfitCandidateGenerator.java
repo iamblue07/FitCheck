@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Score;
 import org.springframework.data.domain.ScoringFunction;
 import org.springframework.data.domain.SearchResult;
 import org.springframework.data.domain.SearchResults;
@@ -46,6 +47,7 @@ public class OutfitCandidateGenerator {
     private static final BigDecimal UNLIMITED_PRICE_CEILING = new BigDecimal("1000000");
     private static final double TOP_BOTTOM_PROBABILITY = 0.7;
     private static final double PREFERRED_ANCHOR_PROBABILITY = 0.8;
+    private static final Score UNBOUNDED_COSINE_DISTANCE = Score.of(2.0, ScoringFunction.cosine());
 
     private static final Set<Month> OUTERWEAR_MONTHS = EnumSet.of(
             Month.OCTOBER, Month.NOVEMBER, Month.DECEMBER, Month.JANUARY, Month.FEBRUARY, Month.MARCH);
@@ -214,14 +216,14 @@ public class OutfitCandidateGenerator {
         Limit limit = Limit.of(properties.topKPerSlot());
 
         SearchResults<Product> withOccasion = productSearchService.findNearestByOccasion(
-                role, genders, priceCeiling, occasion, referenceVector, ScoringFunction.cosine(), limit);
+                role, genders, priceCeiling, occasion, referenceVector, UNBOUNDED_COSINE_DISTANCE, limit);
         List<Product> candidates = extractProducts(withOccasion);
         if (!candidates.isEmpty()) {
             return candidates;
         }
 
         SearchResults<Product> withoutOccasion = productSearchService.findNearest(
-                role, genders, priceCeiling, referenceVector, ScoringFunction.cosine(), limit);
+                role, genders, priceCeiling, referenceVector, UNBOUNDED_COSINE_DISTANCE, limit);
         return extractProducts(withoutOccasion);
     }
 

@@ -40,7 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
         "jwt.secret=" + AdminCatalogControllerTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",
-        "jwt.refresh-expiration=604800000"
+        "jwt.refresh-expiration=604800000",
+        "spring.ai.model.chat=ollama"
 })
 class AdminCatalogControllerTest {
 

@@ -7,6 +7,7 @@ import com.fitcheck.feed.entity.FeedEntry;
 import com.fitcheck.feed.repository.FeedEntryRepository;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserProfileQueryService;
+import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.service.OutfitCandidateGenerator;
 import lombok.AllArgsConstructor;
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -30,6 +32,7 @@ import java.util.UUID;
 public class FeedGenerationService {
 
     private final UserProfileQueryService userProfileQueryService;
+    private final UserStylePreferenceQueryService userStylePreferenceQueryService;
     private final OutfitCandidateGenerator outfitCandidateGenerator;
     private final FeedEntryRepository feedEntryRepository;
     private final FeedEntryPersistenceService feedEntryPersistenceService;
@@ -46,13 +49,14 @@ public class FeedGenerationService {
     public void refillFor(UUID userId) {
         UserProfile profile = userProfileQueryService.getById(userId);
         List<Outfit> candidates = outfitCandidateGenerator.generate(profile);
+        Set<UUID> preferredStyleTagIds = userStylePreferenceQueryService.findPreferredStyleTagIds(userId);
 
         int saved = 0;
         for (Outfit outfit : candidates) {
             if (feedEntryRepository.existsByUserIdAndOutfitId(userId, outfit.getId())) {
                 continue;
             }
-            BigDecimal rankScore = feedRankingService.rankScore(profile, outfit);
+            BigDecimal rankScore = feedRankingService.rankScore(profile, outfit, preferredStyleTagIds);
             if (feedEntryPersistenceService.saveIfAbsent(profile.getUser(), outfit, rankScore)) {
                 saved++;
             }

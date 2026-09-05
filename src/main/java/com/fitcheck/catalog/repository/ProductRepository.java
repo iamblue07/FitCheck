@@ -4,7 +4,7 @@ import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.taxonomy.GarmentRole;
 import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Limit;
-import org.springframework.data.domain.ScoringFunction;
+import org.springframework.data.domain.Score;
 import org.springframework.data.domain.SearchResults;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -44,20 +44,20 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     @Query("UPDATE Product p SET p.garmentRole = :role WHERE p.id IN :ids")
     int updateGarmentRoleByIdIn(@Param("role") GarmentRole role, @Param("ids") Collection<UUID> ids);
 
-    List<Product> findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(
+    List<Product> findByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndPrimaryColorIsNotNullAndTextEmbeddingIsNotNull(
             GarmentRole garmentRole, Collection<String> genders, BigDecimal priceCeiling
     );
 
-    List<Product> findByArticleTypeAndGenderInAndIdNot(
+    List<Product> findByArticleTypeAndGenderInAndIdNotAndPrimaryColorIsNotNullAndTextEmbeddingIsNotNull(
             String articleType, Collection<String> genders, UUID excludeId, Limit limit
     );
 
     SearchResults<Product> searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndTextEmbeddingNear(
             GarmentRole garmentRole, Collection<String> genders, BigDecimal priceCeiling,
-            Vector referenceEmbedding, ScoringFunction scoringFunction, Limit limit);
+            Vector referenceEmbedding, Score score, Limit limit);
 
     SearchResults<Product> searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndOccasionAndTextEmbeddingNear(
             GarmentRole garmentRole, Collection<String> genders, BigDecimal priceCeiling, String occasion,
-            Vector referenceEmbedding, ScoringFunction scoringFunction, Limit limit);
+            Vector referenceEmbedding, Score score, Limit limit);
 
 }

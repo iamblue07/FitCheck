@@ -11,7 +11,8 @@ import java.util.UUID;
 
 public interface OutfitItemRepository extends JpaRepository<OutfitItem, UUID> {
 
-    List<UUID> findDistinctProductIdByOutfitId(UUID outfitId);
+    @Query("SELECT DISTINCT oi.product.id FROM OutfitItem oi WHERE oi.outfit.id = :outfitId")
+    List<UUID> findDistinctProductIdByOutfitId(@Param("outfitId") UUID outfitId);
 
     @Query("SELECT oi FROM OutfitItem oi JOIN FETCH oi.product WHERE oi.outfit.id = :outfitId")
     List<OutfitItem> findByOutfitId(@Param("outfitId") UUID outfitId);

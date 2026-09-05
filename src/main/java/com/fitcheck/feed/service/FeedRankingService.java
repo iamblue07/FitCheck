@@ -3,7 +3,6 @@ package com.fitcheck.feed.service;
 import com.fitcheck.catalog.service.ProductStyleTagQueryService;
 import com.fitcheck.feed.config.FeedRankingProperties;
 import com.fitcheck.identity.entity.UserProfile;
-import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.service.OutfitItemQueryService;
@@ -27,14 +26,13 @@ public class FeedRankingService {
     private static final BigDecimal NEUTRAL_SCORE = new BigDecimal("0.5");
     private static final BigDecimal TWO = new BigDecimal("2");
 
-    private final UserStylePreferenceQueryService userStylePreferenceQueryService;
     private final ProductStyleTagQueryService productStyleTagQueryService;
     private final OutfitItemQueryService outfitItemQueryService;
     private final OutfitGenerationProperties generationProperties;
     private final FeedRankingProperties rankingProperties;
 
-    public BigDecimal rankScore(UserProfile profile, Outfit outfit) {
-        BigDecimal styleOverlap = styleOverlap(profile, outfit);
+    public BigDecimal rankScore(UserProfile profile, Outfit outfit, Set<UUID> preferredStyleTagIds) {
+        BigDecimal styleOverlap = styleOverlap(preferredStyleTagIds, outfit);
         BigDecimal budgetFit = budgetFit(profile, outfit);
 
         BigDecimal personalization = rankingProperties.styleWeight().multiply(styleOverlap)
@@ -52,9 +50,8 @@ public class FeedRankingService {
         return outfitItemQueryService.sumBasePrice(outfit.getId());
     }
 
-    private BigDecimal styleOverlap(UserProfile profile, Outfit outfit) {
-        Set<UUID> preferredTagIds = userStylePreferenceQueryService.findPreferredStyleTagIds(profile.getUserId());
-        if (preferredTagIds.isEmpty()) {
+    private BigDecimal styleOverlap(Set<UUID> preferredStyleTagIds, Outfit outfit) {
+        if (preferredStyleTagIds.isEmpty()) {
             return NEUTRAL_SCORE;
         }
 
@@ -64,10 +61,10 @@ public class FeedRankingService {
             return NEUTRAL_SCORE;
         }
 
-        Set<UUID> intersection = new HashSet<>(preferredTagIds);
+        Set<UUID> intersection = new HashSet<>(preferredStyleTagIds);
         intersection.retainAll(outfitTagIds);
 
-        Set<UUID> union = new HashSet<>(preferredTagIds);
+        Set<UUID> union = new HashSet<>(preferredStyleTagIds);
         union.addAll(outfitTagIds);
 
         return BigDecimal.valueOf(intersection.size())
