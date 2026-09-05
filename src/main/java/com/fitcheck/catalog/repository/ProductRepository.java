@@ -2,6 +2,7 @@ package com.fitcheck.catalog.repository;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.taxonomy.GarmentRole;
+import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.ScoringFunction;
 import org.springframework.data.domain.SearchResults;
@@ -38,6 +39,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     List<Product> findAllByGarmentRoleIsNullAndIdNotIn(Collection<UUID> excludedIds, Limit limit);
 
+    @Transactional
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Product p SET p.garmentRole = :role WHERE p.id IN :ids")
     int updateGarmentRoleByIdIn(@Param("role") GarmentRole role, @Param("ids") Collection<UUID> ids);
