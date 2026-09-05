@@ -147,9 +147,8 @@ class GarmentSwapServiceTest {
         Product other = productWith(UUID.randomUUID(), "Jeans", "Men", new BigDecimal("60"), GarmentRole.BOTTOM);
         stubOutfitContext(outfitId, itemId, target, other);
 
-        // outfitTotal=100, budget=100, tolerance=0.10 -> ceiling=110
-        Product atCeiling = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("50"), GarmentRole.TOP); // 100-40+50=110, allowed
-        Product overCeiling = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("51"), GarmentRole.TOP); // 111, excluded
+        Product atCeiling = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("50"), GarmentRole.TOP);
+        Product overCeiling = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("51"), GarmentRole.TOP);
 
         when(userProfileQueryService.getById(userId)).thenReturn(profileWith(userId, Sex.MALE, new BigDecimal("100")));
         when(productSearchService.findAlternatives(any(), any(), any(), any())).thenReturn(List.of(atCeiling, overCeiling));
@@ -335,7 +334,6 @@ class GarmentSwapServiceTest {
         Product other = productWith(UUID.randomUUID(), "Jeans", "Men", new BigDecimal("60"), GarmentRole.BOTTOM);
         stubOutfitContext(outfitId, itemId, target, other);
 
-        // outfitTotal=100, budget=100, tolerance=0.10 -> ceiling=110; projected = 100-40+51=111 > 110
         Product tooExpensive = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("51"), GarmentRole.TOP);
         when(productSearchService.findById(tooExpensive.getId())).thenReturn(Optional.of(tooExpensive));
         when(userProfileQueryService.getById(userId)).thenReturn(profileWith(userId, Sex.MALE, new BigDecimal("100")));
@@ -395,8 +393,8 @@ class GarmentSwapServiceTest {
         when(outfitPersistenceService.saveNew(any(), eq(breakdown), any(), eq(OutfitSource.MANUAL_SWAP))).thenReturn(saved);
 
         List<OutfitItemView> mappedItems = List.of(
-                new OutfitItemView(other.getId(), other.getProductDisplayName(), other.getImageUrl(), other.getBasePrice(), other.getGarmentRole()),
-                new OutfitItemView(candidate.getId(), candidate.getProductDisplayName(), candidate.getImageUrl(), candidate.getBasePrice(), candidate.getGarmentRole()));
+                new OutfitItemView(UUID.randomUUID(), other.getId(), other.getProductDisplayName(), other.getImageUrl(), other.getBasePrice(), other.getGarmentRole()),
+                new OutfitItemView(UUID.randomUUID(), candidate.getId(), candidate.getProductDisplayName(), candidate.getImageUrl(), candidate.getBasePrice(), candidate.getGarmentRole()));
         when(outfitItemQueryService.findItemViews(saved.getId())).thenReturn(mappedItems);
         when(outfitItemQueryService.sumBasePrice(saved.getId())).thenReturn(new BigDecimal("105"));
 

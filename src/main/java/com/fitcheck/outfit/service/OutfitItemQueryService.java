@@ -23,6 +23,7 @@ public class OutfitItemQueryService {
     public List<OutfitItemView> findItemViews(UUID outfitId) {
         return outfitItemRepository.findByOutfitId(outfitId).stream()
                 .map(item -> new OutfitItemView(
+                        item.getId(),
                         item.getProduct().getId(),
                         item.getProduct().getProductDisplayName(),
                         item.getProduct().getImageUrl(),

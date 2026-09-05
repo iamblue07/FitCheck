@@ -115,11 +115,12 @@ class GarmentSwapControllerSecurityTest {
         UUID itemId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         UUID resultOutfitId = UUID.randomUUID();
+        UUID resultItemId = UUID.randomUUID();
         CompatibilityScoreBreakdown breakdown = new CompatibilityScoreBreakdown(
                 new BigDecimal("0.6"), new BigDecimal("0.65"), new BigDecimal("0.7"),
                 new BigDecimal("0.75"), new BigDecimal("0.68"));
         OutfitResponse mockResponse = new OutfitResponse(resultOutfitId, breakdown, new BigDecimal("104.99"),
-                List.of(new OutfitItemView(productId, "Slim Fit Tee", "https://example.com/tee.jpg",
+                List.of(new OutfitItemView(resultItemId, productId, "Slim Fit Tee", "https://example.com/tee.jpg",
                         new BigDecimal("39.99"), GarmentRole.TOP)));
         when(garmentSwapService.swap(eq(outfitId), eq(itemId), eq(productId), any())).thenReturn(mockResponse);
 
@@ -134,6 +135,7 @@ class GarmentSwapControllerSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.outfitId").value(resultOutfitId.toString()))
                 .andExpect(jsonPath("$.totalPrice").value(104.99))
+                .andExpect(jsonPath("$.items[0].itemId").value(resultItemId.toString()))
                 .andExpect(jsonPath("$.items[0].productId").value(productId.toString()))
                 .andExpect(jsonPath("$.items[0].slot").value("TOP"));
     }

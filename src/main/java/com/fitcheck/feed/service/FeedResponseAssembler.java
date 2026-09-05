@@ -42,6 +42,6 @@ public class FeedResponseAssembler {
 
     private FeedOutfitItemResponse toItemResponse(OutfitItemView view) {
         return new FeedOutfitItemResponse(
-                view.productId(), view.productDisplayName(), view.imageUrl(), view.basePrice(), view.slot());
+                view.itemId(), view.productId(), view.productDisplayName(), view.imageUrl(), view.basePrice(), view.slot());
     }
 }

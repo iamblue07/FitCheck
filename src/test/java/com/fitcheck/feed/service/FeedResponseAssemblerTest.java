@@ -63,7 +63,7 @@ class FeedResponseAssemblerTest {
                 .id(UUID.randomUUID())
                 .colorScore(BigDecimal.ONE).layeringScore(BigDecimal.ONE)
                 .structuredScore(BigDecimal.ONE).embeddingScore(BigDecimal.ONE)
-                .compatibilityScore(new BigDecimal("0.5000")) // deliberately different from rankScore
+                .compatibilityScore(new BigDecimal("0.5000"))
                 .build();
         FeedEntry entry = FeedEntry.builder().outfit(outfit).rankScore(new BigDecimal("0.9999")).build();
         when(outfitItemQueryService.findItemViews(outfit.getId())).thenReturn(List.of());
@@ -77,9 +77,9 @@ class FeedResponseAssemblerTest {
     @Test
     void toResponse_mapsEachItemViewToAFeedOutfitItemResponsePreservingOrder() {
         Outfit outfit = fullyScoredOutfit();
-        OutfitItemView top = new OutfitItemView(UUID.randomUUID(), "Blue Shirt", "http://img/1.jpg",
+        OutfitItemView top = new OutfitItemView(UUID.randomUUID(), UUID.randomUUID(), "Blue Shirt", "http://img/1.jpg",
                 new BigDecimal("40.00"), GarmentRole.TOP);
-        OutfitItemView bottom = new OutfitItemView(UUID.randomUUID(), "Black Jeans", "http://img/2.jpg",
+        OutfitItemView bottom = new OutfitItemView(UUID.randomUUID(), UUID.randomUUID(), "Black Jeans", "http://img/2.jpg",
                 new BigDecimal("60.00"), GarmentRole.BOTTOM);
         FeedEntry entry = FeedEntry.builder().outfit(outfit).rankScore(BigDecimal.ONE).build();
         when(outfitItemQueryService.findItemViews(outfit.getId())).thenReturn(List.of(top, bottom));
@@ -87,8 +87,10 @@ class FeedResponseAssemblerTest {
         FeedItemResponse response = assembler.toResponse(entry);
 
         assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).itemId()).isEqualTo(top.itemId());
         assertThat(response.items().get(0).productId()).isEqualTo(top.productId());
         assertThat(response.items().get(0).slot()).isEqualTo(GarmentRole.TOP);
+        assertThat(response.items().get(1).itemId()).isEqualTo(bottom.itemId());
         assertThat(response.items().get(1).productId()).isEqualTo(bottom.productId());
         assertThat(response.items().get(1).slot()).isEqualTo(GarmentRole.BOTTOM);
     }
@@ -96,16 +98,15 @@ class FeedResponseAssemblerTest {
     @Test
     void toResponse_totalPrice_isSummedFromItemsInMemory_neverCallsSumBasePrice() {
         Outfit outfit = fullyScoredOutfit();
-        OutfitItemView a = new OutfitItemView(UUID.randomUUID(), "A", "url", new BigDecimal("30.00"), GarmentRole.TOP);
-        OutfitItemView b = new OutfitItemView(UUID.randomUUID(), "B", "url", new BigDecimal("45.50"), GarmentRole.BOTTOM);
-        OutfitItemView c = new OutfitItemView(UUID.randomUUID(), "C", "url", new BigDecimal("24.99"), GarmentRole.FOOTWEAR);
+        OutfitItemView a = new OutfitItemView(UUID.randomUUID(), UUID.randomUUID(), "A", "url", new BigDecimal("30.00"), GarmentRole.TOP);
+        OutfitItemView b = new OutfitItemView(UUID.randomUUID(), UUID.randomUUID(), "B", "url", new BigDecimal("45.50"), GarmentRole.BOTTOM);
+        OutfitItemView c = new OutfitItemView(UUID.randomUUID(), UUID.randomUUID(), "C", "url", new BigDecimal("24.99"), GarmentRole.FOOTWEAR);
         FeedEntry entry = FeedEntry.builder().outfit(outfit).rankScore(BigDecimal.ONE).build();
         when(outfitItemQueryService.findItemViews(outfit.getId())).thenReturn(List.of(a, b, c));
 
         FeedItemResponse response = assembler.toResponse(entry);
 
         assertThat(response.totalPrice()).isEqualByComparingTo("100.49");
-        // the whole point of summing in-memory: never issue a second, redundant SUM(...) query
         verify(outfitItemQueryService, never()).sumBasePrice(any());
     }
 

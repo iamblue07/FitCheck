@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public record FeedOutfitItemResponse(
+        UUID itemId,
         UUID productId,
         String productDisplayName,
         String imageUrl,
