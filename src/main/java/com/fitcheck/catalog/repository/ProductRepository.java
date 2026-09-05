@@ -6,8 +6,10 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.ScoringFunction;
 import org.springframework.data.domain.SearchResults;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Vector;
+import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -36,8 +38,16 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     List<Product> findAllByGarmentRoleIsNullAndIdNotIn(Collection<UUID> excludedIds, Limit limit);
 
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Product p SET p.garmentRole = :role WHERE p.id IN :ids")
+    int updateGarmentRoleByIdIn(@Param("role") GarmentRole role, @Param("ids") Collection<UUID> ids);
+
     List<Product> findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(
             GarmentRole garmentRole, Collection<String> genders, BigDecimal priceCeiling
+    );
+
+    List<Product> findByArticleTypeAndGenderInAndIdNot(
+            String articleType, Collection<String> genders, UUID excludeId, Limit limit
     );
 
     SearchResults<Product> searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndTextEmbeddingNear(
@@ -48,11 +58,4 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             GarmentRole garmentRole, Collection<String> genders, BigDecimal priceCeiling, String occasion,
             Vector referenceEmbedding, ScoringFunction scoringFunction, Limit limit);
 
-    List<Product> findByArticleTypeAndGenderInAndIdNot(
-            String articleType, Collection<String> genders, UUID excludeId, Limit limit
-    );
-
 }
-
-
-

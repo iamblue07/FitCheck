@@ -52,19 +52,22 @@ public class GarmentRoleBackfillRunner implements CommandLineRunner {
     }
 
     private int backfillPage(List<Product> page, Set<UUID> unresolvedIds) {
-        List<Product> resolved = new ArrayList<>();
+        Map<GarmentRole, List<UUID>> idsByRole = new EnumMap<>(GarmentRole.class);
 
         for (Product product : page) {
             Optional<GarmentRole> role = garmentRoleResolver.resolve(product.getArticleType());
-            if(role.isPresent()) {
-                product.setGarmentRole(role.get());
-                resolved.add(product);
+            if (role.isPresent()) {
+                idsByRole.computeIfAbsent(role.get(), r -> new ArrayList<>()).add(product.getId());
             } else {
                 log.warn("No GarmentRole mapping for articleType: '{}' (product {})", product.getArticleType(), product.getId());
                 unresolvedIds.add(product.getId());
             }
         }
-        productRepository.saveAll(resolved);
-        return resolved.size();
+
+        int backfilledCount = 0;
+        for (Map.Entry<GarmentRole, List<UUID>> entry : idsByRole.entrySet()) {
+            backfilledCount += productRepository.updateGarmentRoleByIdIn(entry.getKey(), entry.getValue());
+        }
+        return backfilledCount;
     }
 }
