@@ -1,7 +1,9 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.common.exception.BadRequestException;
 import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,17 +24,17 @@ class OutfitCompatibilityScorerTest {
     }
 
     @Test
-    void score_fewerThanTwoProducts_throwsIllegalArgumentException() {
+    void score_fewerThanTwoProducts_throwsBadRequestException() {
         Product single = productWith("black", GarmentRole.TOP, "base", unitVector());
 
         assertThatThrownBy(() -> scorer.score(List.of(single)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test
-    void score_emptyList_throwsIllegalArgumentException() {
+    void score_emptyList_throwsBadRequestException() {
         assertThatThrownBy(() -> scorer.score(List.of()))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test

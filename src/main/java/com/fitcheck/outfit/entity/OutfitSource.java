@@ -2,5 +2,6 @@ package com.fitcheck.outfit.entity;
 
 public enum OutfitSource {
     PROFILE_GENERATED,
-    AI_PROMPT
+    AI_PROMPT,
+    MANUAL_SWAP
 }

@@ -5,7 +5,7 @@ import com.fitcheck.feed.config.FeedRankingProperties;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
-import com.fitcheck.outfit.service.OutfitGenerationProperties;
+import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.service.OutfitItemQueryService;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

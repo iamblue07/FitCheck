@@ -4,11 +4,12 @@ import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.service.ProductSearchService;
 import com.fitcheck.catalog.service.ProductStyleTagQueryService;
 import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.identity.entity.Sex;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
+import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
 import com.fitcheck.outfit.entity.Outfit;
+import com.fitcheck.outfit.entity.OutfitSource;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -21,9 +22,6 @@ import org.springframework.data.domain.Vector;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.Month;
@@ -31,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +36,6 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -47,17 +43,10 @@ import java.util.stream.Collectors;
 @EnableConfigurationProperties(OutfitGenerationProperties.class)
 public class OutfitCandidateGenerator {
 
-    private static final String HASH_ALGORITHM = "SHA-256";
     private static final BigDecimal UNLIMITED_PRICE_CEILING = new BigDecimal("1000000");
     private static final double TOP_BOTTOM_PROBABILITY = 0.7;
     private static final double PREFERRED_ANCHOR_PROBABILITY = 0.8;
 
-    private static final Set<String> ALL_GENDERS = Set.of("Men", "Women", "Boys", "Girls", "Unisex");
-    private static final Map<Sex, Set<String>> GENDER_FILTERS = Map.of(
-            Sex.MALE, Set.of("Men", "Unisex"),
-            Sex.FEMALE, Set.of("Women", "Unisex"),
-            Sex.OTHER, ALL_GENDERS
-    );
     private static final Set<Month> OUTERWEAR_MONTHS = EnumSet.of(
             Month.OCTOBER, Month.NOVEMBER, Month.DECEMBER, Month.JANUARY, Month.FEBRUARY, Month.MARCH);
 
@@ -71,8 +60,11 @@ public class OutfitCandidateGenerator {
     private final Random random;
     private final Clock clock;
 
+    private final OutfitGenderFilterResolver genderFilterResolver;
+    private final OutfitItemSetHasher itemSetHasher;
+
     public List<Outfit> generate(UserProfile profile) {
-        Set<String> genders = resolveGenders(profile.getSex());
+        Set<String> genders = genderFilterResolver.allowedGenders(profile.getSex());
         BigDecimal priceCeiling = resolvePriceCeiling(profile.getAverageBudgetPerOutfit());
 
         List<Product> topPool = productSearchService.findEligible(GarmentRole.TOP, genders, priceCeiling);
@@ -103,10 +95,6 @@ public class OutfitCandidateGenerator {
             return Set.of();
         }
         return Set.copyOf(productStyleTagQueryService.findProductIdsByStyleTagIds(preferredStyleTagIds));
-    }
-
-    private Set<String> resolveGenders(Sex sex) {
-        return sex == null ? ALL_GENDERS : GENDER_FILTERS.get(sex);
     }
 
     private BigDecimal resolvePriceCeiling(BigDecimal averageBudgetPerOutfit) {
@@ -324,7 +312,7 @@ public class OutfitCandidateGenerator {
     }
 
     private Outfit persistOrReuse(List<Product> selected, CompatibilityScoreBreakdown breakdown) {
-        String itemSetHash = computeItemSetHash(selected);
+        String itemSetHash = itemSetHasher.hash(selected);
 
         Optional<Outfit> existing = outfitPersistenceService.findExisting(itemSetHash);
         if (existing.isPresent()) {
@@ -332,26 +320,12 @@ public class OutfitCandidateGenerator {
         }
 
         try {
-            return outfitPersistenceService.saveNew(selected, breakdown, itemSetHash);
+            return outfitPersistenceService.saveNew(selected, breakdown, itemSetHash, OutfitSource.PROFILE_GENERATED);
         } catch (DataIntegrityViolationException e) {
             return outfitPersistenceService.findExisting(itemSetHash)
                     .orElseThrow(() -> new IllegalStateException(
                             "Outfit insert failed on unique constraint but no existing row found for hash "
                                     + itemSetHash, e));
-        }
-    }
-
-    private String computeItemSetHash(List<Product> selected) {
-        String sortedIds = selected.stream()
-                .map(p -> p.getId().toString())
-                .sorted()
-                .collect(Collectors.joining(","));
-        try {
-            MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
-            byte[] hashBytes = digest.digest(sortedIds.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hashBytes);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(HASH_ALGORITHM + " is not available on this JVM", e);
         }
     }
 

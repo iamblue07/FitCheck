@@ -12,7 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @AllArgsConstructor
@@ -22,6 +24,10 @@ public class ProductSearchService {
 
     public List<Product> findEligible(GarmentRole role, Set<String> genders, BigDecimal priceCeiling) {
         return productRepository.findByGarmentRoleAndGenderInAndBasePriceLessThanEqual(role, genders, priceCeiling);
+    }
+
+    public List<Product> findAlternatives(String articleType, Set<String> genders, UUID excludeProductId, Limit limit) {
+        return productRepository.findByArticleTypeAndGenderInAndIdNot(articleType, genders, excludeProductId, limit);
     }
 
     public SearchResults<Product> findNearest(GarmentRole role, Set<String> genders, BigDecimal priceCeiling,
@@ -35,5 +41,9 @@ public class ProductSearchService {
                                                         ScoringFunction scoringFunction, Limit limit) {
         return productRepository.searchByGarmentRoleAndGenderInAndBasePriceLessThanEqualAndOccasionAndTextEmbeddingNear(
                 role, genders, priceCeiling, occasion, referenceEmbedding, scoringFunction, limit);
+    }
+
+    public Optional<Product> findById(UUID productId) {
+        return productRepository.findById(productId);
     }
 }

@@ -7,6 +7,9 @@ import com.fitcheck.common.taxonomy.GarmentRole;
 import com.fitcheck.identity.entity.Sex;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
+import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
+
+import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.entity.Outfit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,13 +59,17 @@ class OutfitCandidateGeneratorTest {
     private OutfitPersistenceService outfitPersistenceService;
 
     private OutfitCompatibilityScorer scorer;
+    private OutfitGenderFilterResolver genderFilterResolver;
+    private OutfitItemSetHasher itemSetHasher;
 
     @BeforeEach
     void setUp() {
         scorer = new OutfitCompatibilityScorer(
                 new OutfitCompatibilityProperties(new BigDecimal("0.5"), new BigDecimal("0.5")));
+        genderFilterResolver = new OutfitGenderFilterResolver();
+        itemSetHasher = new OutfitItemSetHasher();
         lenient().when(userStylePreferenceQueryService.findPreferredStyleTagIds(any())).thenReturn(Set.of());
-        lenient().when(outfitPersistenceService.saveNew(any(), any(), any()))
+        lenient().when(outfitPersistenceService.saveNew(any(), any(), any(), any()))
                 .thenAnswer(invocation -> Outfit.builder()
                         .id(UUID.randomUUID())
                         .itemSetHash(invocation.getArgument(2))
@@ -91,7 +98,7 @@ class OutfitCandidateGeneratorTest {
         OutfitCandidateGenerator generator = generatorWithProperties(5, 20, 1);
 
         assertThat(generator.generate(profile)).isEmpty();
-        verify(outfitPersistenceService, never()).saveNew(any(), any(), any());
+        verify(outfitPersistenceService, never()).saveNew(any(), any(), any(), any());
     }
 
     @Test
@@ -135,7 +142,7 @@ class OutfitCandidateGeneratorTest {
         generator.generate(profile);
 
         ArgumentCaptor<List<Product>> selectedCaptor = ArgumentCaptor.forClass(List.class);
-        verify(outfitPersistenceService, times(2)).saveNew(selectedCaptor.capture(), any(), any());
+        verify(outfitPersistenceService, times(2)).saveNew(selectedCaptor.capture(), any(), any(), any());
         List<UUID> anchorsUsed = selectedCaptor.getAllValues().stream()
                 .map(selected -> selected.get(0).getId())
                 .toList();
@@ -154,7 +161,7 @@ class OutfitCandidateGeneratorTest {
         OutfitCandidateGenerator generator = generatorWithProperties(1, 10, 1);
 
         assertThat(generator.generate(profile)).containsExactly(existing);
-        verify(outfitPersistenceService, never()).saveNew(any(), any(), any());
+        verify(outfitPersistenceService, never()).saveNew(any(), any(), any(), any());
     }
 
     @Test
@@ -167,7 +174,7 @@ class OutfitCandidateGeneratorTest {
         when(outfitPersistenceService.findExisting(any()))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(wonByOtherInvocation));
-        when(outfitPersistenceService.saveNew(any(), any(), any()))
+        when(outfitPersistenceService.saveNew(any(), any(), any(), any()))
                 .thenThrow(new DataIntegrityViolationException("duplicate item_set_hash"));
 
         OutfitCandidateGenerator generator = generatorWithProperties(1, 10, 1);
@@ -210,7 +217,8 @@ class OutfitCandidateGeneratorTest {
                 batchSize, maxAttempts, new BigDecimal("0.10"), topKPerSlot, 2);
         return new OutfitCandidateGenerator(
                 productSearchService, productStyleTagQueryService, userStylePreferenceQueryService,
-                outfitPersistenceService, scorer, properties, new Random(42), SUMMER_CLOCK);
+                outfitPersistenceService, scorer, properties, new Random(42), SUMMER_CLOCK,
+                genderFilterResolver, itemSetHasher);
     }
 
     private void stubAnchorPools(List<Product> topPool, List<Product> fullBodyPool) {

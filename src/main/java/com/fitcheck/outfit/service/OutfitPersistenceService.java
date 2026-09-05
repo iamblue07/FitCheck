@@ -27,9 +27,10 @@ public class OutfitPersistenceService {
     }
 
     @Transactional
-    public Outfit saveNew(List<Product> selected, CompatibilityScoreBreakdown breakdown, String itemSetHash) {
+    public Outfit saveNew(List<Product> selected, CompatibilityScoreBreakdown breakdown, String itemSetHash,
+                          OutfitSource source) {
         Outfit outfit = Outfit.builder()
-                .source(OutfitSource.PROFILE_GENERATED)
+                .source(source)
                 .compatibilityScore(breakdown.finalScore())
                 .colorScore(breakdown.colorScore())
                 .layeringScore(breakdown.layeringScore())

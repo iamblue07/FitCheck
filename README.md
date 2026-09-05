@@ -36,7 +36,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 6.2 | Enrichment & Embeddings | ✅ Done |
 | 7 | Compatibility Scoring & Candidate Generation | ✅ Done |
 | 8 | Infinite Scroll Feed | ✅ Done |
-| 9 | Garment Alternatives | ⬜ Not started |
+| 9 | Garment Alternatives | ✅ Done |
 | 10 | Prompt-to-Outfit & Prompt-to-Garment-Refinement | ⬜ Not started |
 | 11 | FASHN AI Integration & Async Job Pipeline | ⬜ Not started |
 | 12 | Likes, Saves & Shares | ⬜ Not started |
@@ -66,6 +66,8 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - `GET /api/v1/feed`: cursor-paginated, personalized outfit feed. Ranking is a bounded multiplier on the outfit's own compatibility score (so an unvalidated personalization signal can never outrank the validated one), never-repeat is enforced by a real database constraint, and a background refill keeps the feed topped up without ever blocking the request that triggered it.
 - A cross-feature query-facade pattern (`catalog.service.ProductSearchService`, `identity.service.UserProfileQueryService`, and others) so features read each other's data through a narrow, owned contract instead of reaching into each other's repositories directly.
 - Automated test coverage for every chapter, pure Mockito unit tests with no Spring context needed — including concurrency-safe tests for the feed's in-memory refill guard (real thread contention via `CountDownLatch`, not just sequential calls).
+- `GarmentSwapService`, split across two endpoints rather than one: `GET /api/v1/outfits/{outfitId}/items/{itemId}/alternatives` (a safe, side-effect-free read) lists candidate replacements matched on `article_type`, reusing the same gender-filtered nearest-neighbor retrieval as outfit generation; `POST /api/v1/outfits/{outfitId}/items/{itemId}/swap` (the side-effecting action) applies one, re-checks the whole resulting outfit against the configurable per-outfit budget (a stricter cumulative re-check than generation's own per-item guard, since a swap changes a total the user already saw), and persists the result as a new, immutable outfit tagged `OutfitSource.MANUAL_SWAP` through the same race-safe `OutfitPersistenceService` path (`saveAndFlush` + `item_set_hash` unique constraint) used elsewhere.
+- A chapter-wide exception-handling audit: five new `@ExceptionHandler` methods on `GlobalExceptionHandler` covering Spring/DB exception types that were previously falling through to a generic 500 (malformed path variables, malformed JSON bodies, missing request parameters, unsupported HTTP methods, raw database constraint violations), plus two real TOCTOU races fixed at the source (`AuthService.register()`'s email-uniqueness check, mirroring the existing `outfits.item_set_hash` pattern) and a raw `IllegalArgumentException` in `OutfitCompatibilityScorer` replaced with `BadRequestException`. Full writeup in `docs/chapter-09-theory.md`.
 
 
 ## Project structure

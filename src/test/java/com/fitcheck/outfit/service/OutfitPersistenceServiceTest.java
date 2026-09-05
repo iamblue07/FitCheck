@@ -58,9 +58,9 @@ class OutfitPersistenceServiceTest {
                 new BigDecimal("0.9"), new BigDecimal("0.8"), new BigDecimal("0.85"),
                 new BigDecimal("0.9"), new BigDecimal("0.8765"));
 
-        Outfit result = service.saveNew(List.of(product), breakdown, "abc123");
+        Outfit result = service.saveNew(List.of(product), breakdown, "abc123", OutfitSource.MANUAL_SWAP);
 
-        assertThat(result.getSource()).isEqualTo(OutfitSource.PROFILE_GENERATED);
+        assertThat(result.getSource()).isEqualTo(OutfitSource.MANUAL_SWAP);
         assertThat(result.getCompatibilityScore()).isEqualByComparingTo("0.8765");
         assertThat(result.getColorScore()).isEqualByComparingTo("0.9");
         assertThat(result.getLayeringScore()).isEqualByComparingTo("0.8");
@@ -79,7 +79,7 @@ class OutfitPersistenceServiceTest {
                 new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("0.5"),
                 new BigDecimal("0.5"), new BigDecimal("0.5"));
 
-        service.saveNew(List.of(top, footwear), breakdown, "hash");
+        service.saveNew(List.of(top, footwear), breakdown, "hash", OutfitSource.PROFILE_GENERATED);
 
         ArgumentCaptor<List<OutfitItem>> captor = ArgumentCaptor.forClass(List.class);
         verify(outfitItemRepository).saveAll(captor.capture());

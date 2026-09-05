@@ -6,17 +6,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.lang.reflect.Method;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -136,6 +143,87 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody().status()).isEqualTo(404);
         assertThat(response.getBody().path()).isEqualTo(REQUEST_URI);
+    }
+
+    @Test
+    void handleTypeMismatch_malformedPathVariable_returns400NotTheGeneric500() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+                "not-a-uuid", UUID.class, "outfitId", null, new IllegalArgumentException("Invalid UUID string"));
+
+        ResponseEntity<ErrorResponse> response = handler.handleTypeMismatch(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().status()).isEqualTo(400);
+        assertThat(response.getBody().message()).isEqualTo("Parameter 'outfitId' has an invalid value: expected UUID");
+    }
+
+    @Test
+    void handleTypeMismatch_nullRequiredType_fallsBackToGenericPhrasingWithoutNpe() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+                "bogus", null, "someParam", null, new IllegalArgumentException("no type"));
+
+        ResponseEntity<ErrorResponse> response = handler.handleTypeMismatch(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().message()).isEqualTo("Parameter 'someParam' has an invalid value: expected the expected type");
+    }
+
+    @Test
+    void handleMalformedRequestBody_returns400WithGenericMessage_doesNotLeakParserInternals() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        // The two-arg constructor is used deliberately: the single-String constructor is
+        // deprecated in this Spring version. The HttpInputMessage is null because the handler
+        // only reads ex.getMessage() — it never calls ex.getHttpInputMessage().
+        HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
+                "JSON parse error: Unexpected character ('}' (code 125)): was expecting double-quote to start field name",
+                (HttpInputMessage) null);
+
+        ResponseEntity<ErrorResponse> response = handler.handleMalformedRequestBody(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().status()).isEqualTo(400);
+        assertThat(response.getBody().message()).isEqualTo("The request body is missing or malformed JSON");
+    }
+
+    @Test
+    void handleMissingParameter_returns400NamingTheMissingParameter() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        MissingServletRequestParameterException ex =
+                new MissingServletRequestParameterException("cursor", "String");
+
+        ResponseEntity<ErrorResponse> response = handler.handleMissingParameter(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().message()).isEqualTo("Required parameter 'cursor' is missing");
+    }
+
+    @Test
+    void handleMethodNotSupported_returns405NamingTheRejectedMethod() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        HttpRequestMethodNotSupportedException ex = new HttpRequestMethodNotSupportedException("DELETE");
+
+        ResponseEntity<ErrorResponse> response = handler.handleMethodNotSupported(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(response.getBody().status()).isEqualTo(405);
+        assertThat(response.getBody().message()).isEqualTo("HTTP method 'DELETE' is not supported for this endpoint");
+    }
+
+    @Test
+    void handleDataIntegrityViolation_returns409_doesNotLeakConstraintOrSqlDetails() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        DataIntegrityViolationException ex = new DataIntegrityViolationException(
+                "duplicate key value violates unique constraint \"users_email_key\": Key (email)=(x@example.com) already exists.");
+
+        ResponseEntity<ErrorResponse> response = handler.handleDataIntegrityViolation(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        ErrorResponse body = response.getBody();
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("The request conflicts with the current state of the resource");
+        assertThat(body.message()).doesNotContain("users_email_key", "x@example.com", "constraint");
     }
 
     @SuppressWarnings("unused")

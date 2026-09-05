@@ -16,6 +16,7 @@ import com.fitcheck.identity.repository.RefreshTokenRepository;
 import com.fitcheck.identity.repository.UserProfileRepository;
 import com.fitcheck.identity.repository.UserRepository;
 import lombok.AllArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -52,7 +53,11 @@ public class AuthService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .role(Role.USER)
                 .build();
-        user = userRepository.save(user);
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException("An account with this email already exists");
+        }
 
         UserProfile profile = UserProfile.builder()
                 .user(user)

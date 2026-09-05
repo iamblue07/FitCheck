@@ -99,7 +99,7 @@ class AuthServiceTest {
         RegisterRequest request = new RegisterRequest("new@example.com", "password123");
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
         when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
         when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
@@ -107,7 +107,7 @@ class AuthServiceTest {
         authService.register(request);
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(userCaptor.capture());
+        verify(userRepository).saveAndFlush(userCaptor.capture());
         User savedUser = userCaptor.getValue();
         assertThat(savedUser.getEmail()).isEqualTo("new@example.com");
         assertThat(savedUser.getRole()).isEqualTo(Role.USER);
@@ -125,7 +125,22 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(ConflictException.class);
 
-        verify(userRepository, never()).save(any(User.class));
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void register_concurrentRegistrationLosesUniqueConstraintRace_throwsConflictExceptionNotDataIntegrityViolationException() {
+        RegisterRequest request = new RegisterRequest("racing@example.com", "password123");
+        when(userRepository.existsByEmail("racing@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key value violates unique constraint \"users_email_key\""));
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("An account with this email already exists");
+
+        verify(userProfileRepository, never()).save(any(UserProfile.class));
     }
 
     @Test
@@ -133,7 +148,7 @@ class AuthServiceTest {
         RegisterRequest request = new RegisterRequest("MixedCase@Example.COM", "password123");
         when(userRepository.existsByEmail("mixedcase@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
         when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
         when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
@@ -141,7 +156,7 @@ class AuthServiceTest {
         authService.register(request);
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(userCaptor.capture());
+        verify(userRepository).saveAndFlush(userCaptor.capture());
         assertThat(userCaptor.getValue().getEmail()).isEqualTo("mixedcase@example.com");
     }
 
@@ -150,7 +165,7 @@ class AuthServiceTest {
         RegisterRequest request = new RegisterRequest("new@example.com", "plainTextPassword123");
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(passwordEncoder.encode("plainTextPassword123")).thenReturn("{bcrypt}$2a$10$hashedvalue");
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
         when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
         when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
@@ -158,7 +173,7 @@ class AuthServiceTest {
         authService.register(request);
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(userCaptor.capture());
+        verify(userRepository).saveAndFlush(userCaptor.capture());
         assertThat(userCaptor.getValue().getPasswordHash()).isEqualTo("{bcrypt}$2a$10$hashedvalue");
         assertThat(userCaptor.getValue().getPasswordHash()).isNotEqualTo("plainTextPassword123");
     }

@@ -48,6 +48,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             GarmentRole garmentRole, Collection<String> genders, BigDecimal priceCeiling, String occasion,
             Vector referenceEmbedding, ScoringFunction scoringFunction, Limit limit);
 
+    List<Product> findByArticleTypeAndGenderInAndIdNot(
+            String articleType, Collection<String> genders, UUID excludeId, Limit limit
+    );
+
 }
 
 

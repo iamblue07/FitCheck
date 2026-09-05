@@ -1,4 +1,4 @@
-package com.fitcheck.outfit.service;
+package com.fitcheck.outfit.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

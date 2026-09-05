@@ -1,7 +1,9 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.common.exception.BadRequestException;
 import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
 import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -31,8 +33,8 @@ public class OutfitCompatibilityScorer {
 
     public CompatibilityScoreBreakdown score(List<Product> products) {
         if (products.size() < 2) {
-            throw new IllegalArgumentException(
-                    "OutfitCompatibilityScorer requires at least 2 products, got " + products.size());
+            throw new BadRequestException(
+                    "An outfit compatibility score requires at least 2 products, got " + products.size());
         }
 
         BigDecimal colorScore = average(pairwiseScores(products, this::colorPairScore));
