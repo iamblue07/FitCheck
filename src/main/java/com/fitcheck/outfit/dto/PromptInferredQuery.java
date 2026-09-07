@@ -1,0 +1,12 @@
+package com.fitcheck.outfit.dto;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Set;
+
+public record PromptInferredQuery(
+        List<OutfitBlueprint> blueprints,
+        Set<String> genders,
+        BigDecimal budget
+) {
+}

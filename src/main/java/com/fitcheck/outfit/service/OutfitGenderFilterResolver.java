@@ -9,7 +9,7 @@ import java.util.Set;
 @Component
 public class OutfitGenderFilterResolver {
 
-    private static final Set<String> ALL_GENDERS = Set.of("Men", "Women", "Boys", "Girls", "Unisex");
+    public static final Set<String> ALL_GENDERS = Set.of("Men", "Women", "Boys", "Girls", "Unisex");
     private static final Map<Sex, Set<String>> GENDER_FILTERS = Map.of(
             Sex.MALE, Set.of("Men", "Unisex"),
             Sex.FEMALE, Set.of("Women", "Unisex"),

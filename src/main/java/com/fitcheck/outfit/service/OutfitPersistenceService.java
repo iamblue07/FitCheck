@@ -8,6 +8,7 @@ import com.fitcheck.outfit.entity.OutfitSource;
 import com.fitcheck.outfit.repository.OutfitItemRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;
 import lombok.AllArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +48,24 @@ public class OutfitPersistenceService {
         outfitItemRepository.saveAll(items);
 
         return outfit;
+    }
+
+    @Transactional
+    public Outfit saveOrReuse(List<Product> selected, CompatibilityScoreBreakdown breakdown, String itemSetHash,
+                              OutfitSource source) {
+        Optional<Outfit> existing = findExisting(itemSetHash);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        try {
+            return saveNew(selected, breakdown, itemSetHash, source);
+        } catch (DataIntegrityViolationException e) {
+            return findExisting(itemSetHash)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Outfit insert failed on unique constraint but no existing row found for hash "
+                                    + itemSetHash, e));
+        }
     }
 
     private OutfitItem buildOutfitItem(Outfit outfit, Product product) {

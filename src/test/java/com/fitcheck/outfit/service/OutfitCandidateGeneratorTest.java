@@ -8,7 +8,7 @@ import com.fitcheck.identity.entity.Sex;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
 import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
-
+import com.fitcheck.outfit.config.OutfitDiversityProperties;
 import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.entity.Outfit;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,14 +26,17 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -123,14 +126,14 @@ class OutfitCandidateGeneratorTest {
         stubSlotCandidates(GarmentRole.BOTTOM, List.of(productWithRole(GarmentRole.BOTTOM)));
         stubSlotCandidates(GarmentRole.FOOTWEAR, List.of(productWithRole(GarmentRole.FOOTWEAR)));
 
-        // batchSize of 10 can never be reached - only 2 distinct anchors exist
+        // batchSize of 10 can never be reached - only 2 distinct anchors exist, capped at 3 uses each
         OutfitCandidateGenerator generator = generatorWithProperties(10, 100, 1);
 
-        assertThat(generator.generate(profile)).hasSize(2);
+        assertThat(generator.generate(profile)).hasSizeLessThanOrEqualTo(6);
     }
 
     @Test
-    void generate_usedAnchors_neverRepeatWithinOneInvocation() {
+    void generate_moreOutfitsRequestedThanAnchors_repeatsAnchorsButNeverExceedsTheDiversityCap() {
         UserProfile profile = profileWith(Sex.OTHER, new BigDecimal("200"));
         Product anchor1 = productWithRole(GarmentRole.TOP);
         Product anchor2 = productWithRole(GarmentRole.TOP);
@@ -138,15 +141,17 @@ class OutfitCandidateGeneratorTest {
         stubSlotCandidates(GarmentRole.BOTTOM, List.of(productWithRole(GarmentRole.BOTTOM)));
         stubSlotCandidates(GarmentRole.FOOTWEAR, List.of(productWithRole(GarmentRole.FOOTWEAR)));
 
-        OutfitCandidateGenerator generator = generatorWithProperties(2, 50, 1);
+        OutfitCandidateGenerator generator = generatorWithProperties(6, 100, 1);
         generator.generate(profile);
 
         ArgumentCaptor<List<Product>> selectedCaptor = ArgumentCaptor.forClass(List.class);
-        verify(outfitPersistenceService, times(2)).saveNew(selectedCaptor.capture(), any(), any(), any());
-        List<UUID> anchorsUsed = selectedCaptor.getAllValues().stream()
+        verify(outfitPersistenceService, atLeastOnce()).saveNew(selectedCaptor.capture(), any(), any(), any());
+
+        Map<UUID, Long> anchorUsageCounts = selectedCaptor.getAllValues().stream()
                 .map(selected -> selected.get(0).getId())
-                .toList();
-        assertThat(anchorsUsed).containsExactlyInAnyOrder(anchor1.getId(), anchor2.getId());
+                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+
+        assertThat(anchorUsageCounts.values()).allMatch(count -> count <= 3);
     }
 
     @Test
@@ -215,10 +220,11 @@ class OutfitCandidateGeneratorTest {
     private OutfitCandidateGenerator generatorWithProperties(int batchSize, int maxAttempts, int topKPerSlot) {
         OutfitGenerationProperties properties = new OutfitGenerationProperties(
                 batchSize, maxAttempts, new BigDecimal("0.10"), topKPerSlot, 2);
+        OutfitDiversityProperties diversityProperties = new OutfitDiversityProperties(3);
         return new OutfitCandidateGenerator(
                 productSearchService, productStyleTagQueryService, userStylePreferenceQueryService,
                 outfitPersistenceService, scorer, properties, new Random(42), SUMMER_CLOCK,
-                genderFilterResolver, itemSetHasher);
+                genderFilterResolver, itemSetHasher, new BudgetCeilingResolver(properties), diversityProperties);
     }
 
     private void stubAnchorPools(List<Product> topPool, List<Product> fullBodyPool) {

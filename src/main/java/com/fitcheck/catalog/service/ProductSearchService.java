@@ -6,6 +6,7 @@ import com.fitcheck.common.taxonomy.GarmentRole;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Score;
+import org.springframework.data.domain.ScoringFunction;
 import org.springframework.data.domain.SearchResults;
 import org.springframework.data.domain.Vector;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,8 @@ import java.util.UUID;
 @Service
 @AllArgsConstructor
 public class ProductSearchService {
+
+    public static final Score UNBOUNDED_COSINE_DISTANCE = Score.of(2.0, ScoringFunction.cosine());
 
     private final ProductRepository productRepository;
 

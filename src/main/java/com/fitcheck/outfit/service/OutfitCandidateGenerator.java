@@ -6,6 +6,7 @@ import com.fitcheck.catalog.service.ProductStyleTagQueryService;
 import com.fitcheck.common.taxonomy.GarmentRole;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;
+import com.fitcheck.outfit.config.OutfitDiversityProperties;
 import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
 import com.fitcheck.outfit.entity.Outfit;
@@ -15,8 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
-import org.springframework.data.domain.Score;
-import org.springframework.data.domain.ScoringFunction;
 import org.springframework.data.domain.SearchResult;
 import org.springframework.data.domain.SearchResults;
 import org.springframework.data.domain.Vector;
@@ -29,6 +28,7 @@ import java.time.Month;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,13 +41,11 @@ import java.util.UUID;
 @Slf4j
 @Service
 @AllArgsConstructor
-@EnableConfigurationProperties(OutfitGenerationProperties.class)
+@EnableConfigurationProperties({OutfitGenerationProperties.class, OutfitDiversityProperties.class})
 public class OutfitCandidateGenerator {
 
-    private static final BigDecimal UNLIMITED_PRICE_CEILING = new BigDecimal("1000000");
     private static final double TOP_BOTTOM_PROBABILITY = 0.7;
     private static final double PREFERRED_ANCHOR_PROBABILITY = 0.8;
-    private static final Score UNBOUNDED_COSINE_DISTANCE = Score.of(2.0, ScoringFunction.cosine());
 
     private static final Set<Month> OUTERWEAR_MONTHS = EnumSet.of(
             Month.OCTOBER, Month.NOVEMBER, Month.DECEMBER, Month.JANUARY, Month.FEBRUARY, Month.MARCH);
@@ -64,17 +62,19 @@ public class OutfitCandidateGenerator {
 
     private final OutfitGenderFilterResolver genderFilterResolver;
     private final OutfitItemSetHasher itemSetHasher;
+    private final BudgetCeilingResolver budgetCeilingResolver;
+    private final OutfitDiversityProperties diversityProperties;
 
     public List<Outfit> generate(UserProfile profile) {
         Set<String> genders = genderFilterResolver.allowedGenders(profile.getSex());
-        BigDecimal priceCeiling = resolvePriceCeiling(profile.getAverageBudgetPerOutfit());
+        BigDecimal priceCeiling = budgetCeilingResolver.resolve(profile.getAverageBudgetPerOutfit());
 
         List<Product> topPool = productSearchService.findEligible(GarmentRole.TOP, genders, priceCeiling);
         List<Product> fullBodyPool = productSearchService.findEligible(GarmentRole.FULL_BODY, genders, priceCeiling);
         Set<UUID> preferredProductIds = resolvePreferredProductIds(profile.getUserId());
 
         GenerationContext context = new GenerationContext(
-                genders, priceCeiling, topPool, fullBodyPool, preferredProductIds, new HashSet<>());
+                genders, priceCeiling, topPool, fullBodyPool, preferredProductIds, new HashMap<>());
 
         List<Outfit> results = new ArrayList<>();
         int attempts = 0;
@@ -99,16 +99,9 @@ public class OutfitCandidateGenerator {
         return Set.copyOf(productStyleTagQueryService.findProductIdsByStyleTagIds(preferredStyleTagIds));
     }
 
-    private BigDecimal resolvePriceCeiling(BigDecimal averageBudgetPerOutfit) {
-        if (averageBudgetPerOutfit == null) {
-            return UNLIMITED_PRICE_CEILING;
-        }
-        return averageBudgetPerOutfit.multiply(BigDecimal.ONE.add(properties.budgetTolerance()));
-    }
-
     private Optional<Outfit> runCycle(GenerationContext context) {
-        List<Product> availableTop = filterUnused(context.topPool(), context.usedAnchorIds());
-        List<Product> availableFullBody = filterUnused(context.fullBodyPool(), context.usedAnchorIds());
+        List<Product> availableTop = filterAvailable(context.topPool(), context.productUsageCounts());
+        List<Product> availableFullBody = filterAvailable(context.fullBodyPool(), context.productUsageCounts());
 
         CoreShape coreShape = rollCoreShape(availableTop, availableFullBody);
         if (coreShape == null) {
@@ -117,7 +110,6 @@ public class OutfitCandidateGenerator {
 
         List<Product> anchorPool = coreShape == CoreShape.TOP_BOTTOM ? availableTop : availableFullBody;
         Product anchor = sampleAnchor(anchorPool, context.preferredProductIds());
-        context.usedAnchorIds().add(anchor.getId());
         String anchorOccasion = anchor.getOccasion();
 
         List<BeamPath> beams = List.of(new BeamPath(List.of(anchor), BigDecimal.ZERO, new LinkedHashMap<>()));
@@ -144,7 +136,10 @@ public class OutfitCandidateGenerator {
         List<Product> polished = polish(winner);
 
         CompatibilityScoreBreakdown breakdown = compatibilityScorer.score(polished);
-        return Optional.of(persistOrReuse(polished, breakdown));
+        Outfit outfit = persistOrReuse(polished, breakdown);
+        recordUsage(polished, context.productUsageCounts());
+
+        return Optional.of(outfit);
     }
 
     private List<BeamPath> expandBeams(List<BeamPath> beams, GarmentRole role, String anchorOccasion,
@@ -154,6 +149,7 @@ public class OutfitCandidateGenerator {
             Vector reference = computeCentroid(beam.selected());
             List<Product> candidates = fetchSlotCandidates(
                     role, context.genders(), context.priceCeiling(), reference, anchorOccasion);
+            candidates = filterAvailable(candidates, context.productUsageCounts());
             if (candidates.isEmpty()) {
                 if (optional) {
                     nextGeneration.add(beam);
@@ -216,14 +212,14 @@ public class OutfitCandidateGenerator {
         Limit limit = Limit.of(properties.topKPerSlot());
 
         SearchResults<Product> withOccasion = productSearchService.findNearestByOccasion(
-                role, genders, priceCeiling, occasion, referenceVector, UNBOUNDED_COSINE_DISTANCE, limit);
+                role, genders, priceCeiling, occasion, referenceVector, ProductSearchService.UNBOUNDED_COSINE_DISTANCE, limit);
         List<Product> candidates = extractProducts(withOccasion);
         if (!candidates.isEmpty()) {
             return candidates;
         }
 
         SearchResults<Product> withoutOccasion = productSearchService.findNearest(
-                role, genders, priceCeiling, referenceVector, UNBOUNDED_COSINE_DISTANCE, limit);
+                role, genders, priceCeiling, referenceVector, ProductSearchService.UNBOUNDED_COSINE_DISTANCE, limit);
         return extractProducts(withoutOccasion);
     }
 
@@ -309,8 +305,15 @@ public class OutfitCandidateGenerator {
         return OUTERWEAR_MONTHS.contains(LocalDate.now(clock).getMonth());
     }
 
-    private List<Product> filterUnused(List<Product> pool, Set<UUID> usedIds) {
-        return pool.stream().filter(p -> !usedIds.contains(p.getId())).toList();
+    private List<Product> filterAvailable(List<Product> pool, Map<UUID, Integer> usageCounts) {
+        int cap = diversityProperties.maxProductRepetitions();
+        return pool.stream().filter(p -> usageCounts.getOrDefault(p.getId(), 0) < cap).toList();
+    }
+
+    private void recordUsage(List<Product> products, Map<UUID, Integer> usageCounts) {
+        for (Product product : products) {
+            usageCounts.merge(product.getId(), 1, Integer::sum);
+        }
     }
 
     private Outfit persistOrReuse(List<Product> selected, CompatibilityScoreBreakdown breakdown) {
@@ -344,7 +347,7 @@ public class OutfitCandidateGenerator {
             List<Product> topPool,
             List<Product> fullBodyPool,
             Set<UUID> preferredProductIds,
-            Set<UUID> usedAnchorIds
+            Map<UUID, Integer> productUsageCounts
     ) {
     }
 }
