@@ -12,6 +12,7 @@ import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.config.OutfitPromptProperties;
 import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
 import com.fitcheck.outfit.dto.OutfitBlueprint;
+import com.fitcheck.outfit.dto.OutfitItemView;
 import com.fitcheck.outfit.dto.OutfitResponse;
 import com.fitcheck.outfit.dto.SlotDescription;
 import com.fitcheck.outfit.dto.StructuredPromptQuery;
@@ -28,13 +29,16 @@ import org.springframework.data.domain.SearchResults;
 import org.springframework.data.domain.Vector;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -105,7 +109,7 @@ class PromptOutfitGenerationServiceTest {
         assertThatThrownBy(() -> service.generate(userId, "bad prompt", true)).isSameAs(failure);
 
         verify(aiPromptQueryService).logFailure(userId, "bad prompt", failure.getMessage());
-        verify(aiPromptQueryService, never()).logSuccess(any(), any(), any(), any());
+        verify(aiPromptQueryService, never()).logSuccess(any(), any(), any(), anyBoolean(), any());
         verifyNoInteractions(outfitPersistenceService);
         verifyNoInteractions(userProfileQueryService);
     }
@@ -147,10 +151,11 @@ class PromptOutfitGenerationServiceTest {
         when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.8"));
 
         UUID outfitId = UUID.randomUUID();
-        when(outfitPersistenceService.saveOrReuse(any(), any(), any(), eq(OutfitSource.AI_PROMPT)))
-                .thenReturn(Outfit.builder().id(outfitId).build());
-        when(outfitItemQueryService.findItemViews(outfitId)).thenReturn(List.of());
-        when(outfitItemQueryService.sumBasePrice(outfitId)).thenReturn(new BigDecimal("120"));
+        Outfit outfit = Outfit.builder().id(outfitId).build();
+        when(outfitPersistenceService.saveOrReuseBatch(any())).thenReturn(List.of(outfit));
+        when(outfitItemQueryService.findItemViewsForOutfits(List.of(outfitId))).thenReturn(Map.of(outfitId, List.of()));
+        when(outfitItemQueryService.sumBasePriceForOutfits(List.of(outfitId)))
+                .thenReturn(Map.of(outfitId, new BigDecimal("120")));
 
         List<OutfitResponse> responses = service.generate(userId, "smart casual", true);
 
@@ -158,13 +163,17 @@ class PromptOutfitGenerationServiceTest {
         assertThat(responses.get(0).outfitId()).isEqualTo(outfitId);
         assertThat(responses.get(0).totalPrice()).isEqualTo(new BigDecimal("120"));
 
-        ArgumentCaptor<List<Product>> selectedCaptor = ArgumentCaptor.forClass(List.class);
-        verify(outfitPersistenceService).saveOrReuse(selectedCaptor.capture(), any(), any(), eq(OutfitSource.AI_PROMPT));
-        assertThat(selectedCaptor.getValue()).containsExactlyInAnyOrder(top, bottom, shoes);
-        assertThat(selectedCaptor.getValue()).extracting(Product::getGarmentRole)
+        ArgumentCaptor<List<OutfitPersistenceService.PersistenceCandidate>> candidatesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(outfitPersistenceService).saveOrReuseBatch(candidatesCaptor.capture());
+        List<OutfitPersistenceService.PersistenceCandidate> candidates = candidatesCaptor.getValue();
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).products()).containsExactlyInAnyOrder(top, bottom, shoes);
+        assertThat(candidates.get(0).products()).extracting(Product::getGarmentRole)
                 .containsExactlyInAnyOrder(GarmentRole.TOP, GarmentRole.BOTTOM, GarmentRole.FOOTWEAR);
+        assertThat(candidates.get(0).source()).isEqualTo(OutfitSource.AI_PROMPT);
 
-        verify(aiPromptQueryService).logSuccess(userId, "smart casual", query, outfitId);
+        verify(aiPromptQueryService).logSuccess(userId, "smart casual", query, true, List.of(outfitId));
         verify(aiPromptQueryService, never()).logFailure(any(), any(), any());
 
         ArgumentCaptor<Set<String>> gendersCaptor = ArgumentCaptor.forClass(Set.class);
@@ -180,10 +189,8 @@ class PromptOutfitGenerationServiceTest {
         when(promptQueryEmbeddingService.embed(any())).thenReturn(Vector.of(new float[]{1f, 0f, 0f}));
         stubAllSlotCandidates();
         when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.7"));
-        when(outfitPersistenceService.saveOrReuse(any(), any(), any(), any()))
-                .thenReturn(Outfit.builder().id(UUID.randomUUID()).build());
-        lenient().when(outfitItemQueryService.findItemViews(any())).thenReturn(List.of());
-        lenient().when(outfitItemQueryService.sumBasePrice(any())).thenReturn(BigDecimal.ZERO);
+        stubBatchPersistence();
+        stubItemViewsAndPricesFor(BigDecimal.ZERO);
 
         service.generate(userId, "anything", true);
 
@@ -231,19 +238,44 @@ class PromptOutfitGenerationServiceTest {
 
         UUID topBottomOutfitId = UUID.randomUUID();
         UUID fullBodyOutfitId = UUID.randomUUID();
-        when(outfitPersistenceService.saveOrReuse(eq(topBottomCombination), any(), any(), eq(OutfitSource.AI_PROMPT)))
-                .thenReturn(Outfit.builder().id(topBottomOutfitId).build());
-        when(outfitPersistenceService.saveOrReuse(eq(fullBodyCombination), any(), any(), eq(OutfitSource.AI_PROMPT)))
-                .thenReturn(Outfit.builder().id(fullBodyOutfitId).build());
-        when(outfitItemQueryService.findItemViews(any())).thenReturn(List.of());
-        when(outfitItemQueryService.sumBasePrice(any())).thenReturn(new BigDecimal("200"));
+        when(outfitPersistenceService.saveOrReuseBatch(any())).thenAnswer(invocation -> {
+            List<OutfitPersistenceService.PersistenceCandidate> candidates = invocation.getArgument(0);
+            return candidates.stream()
+                    .map(candidate -> candidate.products().contains(dress)
+                            ? Outfit.builder().id(fullBodyOutfitId).build()
+                            : Outfit.builder().id(topBottomOutfitId).build())
+                    .toList();
+        });
+        when(outfitItemQueryService.findItemViewsForOutfits(any())).thenAnswer(invocation -> {
+            List<UUID> ids = invocation.getArgument(0);
+            Map<UUID, List<OutfitItemView>> result = new HashMap<>();
+            for (UUID id : ids) {
+                result.put(id, List.of());
+            }
+            return result;
+        });
+        when(outfitItemQueryService.sumBasePriceForOutfits(any())).thenAnswer(invocation -> {
+            List<UUID> ids = invocation.getArgument(0);
+            Map<UUID, BigDecimal> result = new HashMap<>();
+            for (UUID id : ids) {
+                result.put(id, new BigDecimal("200"));
+            }
+            return result;
+        });
 
         List<OutfitResponse> responses = service.generate(userId, "give me two options", true);
 
         assertThat(responses).hasSize(2);
         assertThat(responses.get(0).outfitId()).isEqualTo(fullBodyOutfitId);
         assertThat(responses.get(1).outfitId()).isEqualTo(topBottomOutfitId);
-        verify(aiPromptQueryService).logSuccess(userId, "give me two options", query, fullBodyOutfitId);
+        verify(aiPromptQueryService).logSuccess(userId, "give me two options", query, true,
+                List.of(fullBodyOutfitId, topBottomOutfitId));
+
+        ArgumentCaptor<List<OutfitPersistenceService.PersistenceCandidate>> candidatesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(outfitPersistenceService).saveOrReuseBatch(candidatesCaptor.capture());
+        assertThat(candidatesCaptor.getValue()).extracting(OutfitPersistenceService.PersistenceCandidate::products)
+                .containsExactly(fullBodyCombination, topBottomCombination);
     }
 
     @Test
@@ -271,15 +303,16 @@ class PromptOutfitGenerationServiceTest {
         when(productSearchService.findNearest(eq(GarmentRole.FOOTWEAR), any(), any(), any(), any(), any()))
                 .thenReturn(resultsOf(shoes));
         when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.5"));
-        when(outfitPersistenceService.saveOrReuse(any(), any(), any(), any()))
-                .thenReturn(Outfit.builder().id(UUID.randomUUID()).build());
-        lenient().when(outfitItemQueryService.findItemViews(any())).thenReturn(List.of());
-        lenient().when(outfitItemQueryService.sumBasePrice(any())).thenReturn(BigDecimal.ZERO);
+        stubBatchPersistence();
+        stubItemViewsAndPricesFor(BigDecimal.ZERO);
 
         List<OutfitResponse> responses = service.generate(userId, "two tops to choose from", true);
 
         assertThat(responses).hasSize(1);
-        verify(outfitPersistenceService, times(1)).saveOrReuse(any(), any(), any(), any());
+        ArgumentCaptor<List<OutfitPersistenceService.PersistenceCandidate>> candidatesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(outfitPersistenceService).saveOrReuseBatch(candidatesCaptor.capture());
+        assertThat(candidatesCaptor.getValue()).hasSize(1);
     }
 
     @Test
@@ -301,19 +334,19 @@ class PromptOutfitGenerationServiceTest {
         when(productSearchService.findNearest(eq(GarmentRole.FOOTWEAR), any(), any(), any(), any(), any()))
                 .thenReturn(resultsOf(shoes));
         when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.5"));
-        when(outfitPersistenceService.saveOrReuse(any(), any(), any(), any()))
-                .thenAnswer(invocation -> Outfit.builder().id(UUID.randomUUID()).build());
-        lenient().when(outfitItemQueryService.findItemViews(any())).thenReturn(List.of());
-        lenient().when(outfitItemQueryService.sumBasePrice(any())).thenReturn(BigDecimal.ZERO);
+        stubBatchPersistence();
+        stubItemViewsAndPricesFor(BigDecimal.ZERO);
 
         service.generate(userId, "two tops two bottoms", true);
 
         // "shoes" is the only footwear candidate - if all 4 top x bottom combinations were kept,
         // it would be used 4 times. The diversity cap (3) must stop that.
-        ArgumentCaptor<List<Product>> selectedCaptor = ArgumentCaptor.forClass(List.class);
-        verify(outfitPersistenceService, atLeastOnce()).saveOrReuse(selectedCaptor.capture(), any(), any(), any());
+        ArgumentCaptor<List<OutfitPersistenceService.PersistenceCandidate>> candidatesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(outfitPersistenceService).saveOrReuseBatch(candidatesCaptor.capture());
 
-        long shoesUsageCount = selectedCaptor.getAllValues().stream()
+        long shoesUsageCount = candidatesCaptor.getValue().stream()
+                .map(OutfitPersistenceService.PersistenceCandidate::products)
                 .flatMap(List::stream)
                 .filter(product -> product.getId().equals(shoes.getId()))
                 .count();
@@ -335,6 +368,32 @@ class PromptOutfitGenerationServiceTest {
                 .thenReturn(resultsOf(productWithRole(GarmentRole.BOTTOM)));
         when(productSearchService.findNearest(eq(GarmentRole.FOOTWEAR), any(), any(), any(), any(), any()))
                 .thenReturn(resultsOf(productWithRole(GarmentRole.FOOTWEAR)));
+    }
+
+    private void stubBatchPersistence() {
+        when(outfitPersistenceService.saveOrReuseBatch(any())).thenAnswer(invocation -> {
+            List<OutfitPersistenceService.PersistenceCandidate> candidates = invocation.getArgument(0);
+            return candidates.stream().map(candidate -> Outfit.builder().id(UUID.randomUUID()).build()).toList();
+        });
+    }
+
+    private void stubItemViewsAndPricesFor(BigDecimal totalPrice) {
+        lenient().when(outfitItemQueryService.findItemViewsForOutfits(any())).thenAnswer(invocation -> {
+            List<UUID> ids = invocation.getArgument(0);
+            Map<UUID, List<OutfitItemView>> result = new HashMap<>();
+            for (UUID id : ids) {
+                result.put(id, List.of());
+            }
+            return result;
+        });
+        lenient().when(outfitItemQueryService.sumBasePriceForOutfits(any())).thenAnswer(invocation -> {
+            List<UUID> ids = invocation.getArgument(0);
+            Map<UUID, BigDecimal> result = new HashMap<>();
+            for (UUID id : ids) {
+                result.put(id, totalPrice);
+            }
+            return result;
+        });
     }
 
     private UserProfile profileWith(Sex sex, BigDecimal budget) {

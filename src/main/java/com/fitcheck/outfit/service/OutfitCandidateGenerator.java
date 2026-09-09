@@ -14,7 +14,6 @@ import com.fitcheck.outfit.entity.OutfitSource;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.SearchResult;
 import org.springframework.data.domain.SearchResults;
@@ -136,7 +135,8 @@ public class OutfitCandidateGenerator {
         List<Product> polished = polish(winner);
 
         CompatibilityScoreBreakdown breakdown = compatibilityScorer.score(polished);
-        Outfit outfit = persistOrReuse(polished, breakdown);
+        String itemSetHash = itemSetHasher.hash(polished);
+        Outfit outfit = outfitPersistenceService.saveOrReuse(polished, breakdown, itemSetHash, OutfitSource.PROFILE_GENERATED);
         recordUsage(polished, context.productUsageCounts());
 
         return Optional.of(outfit);
@@ -313,24 +313,6 @@ public class OutfitCandidateGenerator {
     private void recordUsage(List<Product> products, Map<UUID, Integer> usageCounts) {
         for (Product product : products) {
             usageCounts.merge(product.getId(), 1, Integer::sum);
-        }
-    }
-
-    private Outfit persistOrReuse(List<Product> selected, CompatibilityScoreBreakdown breakdown) {
-        String itemSetHash = itemSetHasher.hash(selected);
-
-        Optional<Outfit> existing = outfitPersistenceService.findExisting(itemSetHash);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        try {
-            return outfitPersistenceService.saveNew(selected, breakdown, itemSetHash, OutfitSource.PROFILE_GENERATED);
-        } catch (DataIntegrityViolationException e) {
-            return outfitPersistenceService.findExisting(itemSetHash)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Outfit insert failed on unique constraint but no existing row found for hash "
-                                    + itemSetHash, e));
         }
     }
 

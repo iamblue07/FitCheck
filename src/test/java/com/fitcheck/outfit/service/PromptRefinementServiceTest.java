@@ -134,13 +134,13 @@ class PromptRefinementServiceTest {
     }
 
     @Test
-    void refine_maleSex_resolvesToMenAndUnisexGenders() {
+    void refine_queriesUsingGenderCompatibleWithTargetItemNotViewerProfile() {
         Product target = productWith(GarmentRole.TOP, "Tshirts", "Men", new BigDecimal("40"));
         Product other = productWith(GarmentRole.BOTTOM, "Jeans", "Men", new BigDecimal("60"));
         stubContext(target, other);
         when(promptExtractionService.extractSingleSlot(any(), eq(GarmentRole.TOP))).thenReturn("something");
         when(promptQueryEmbeddingService.embed(any())).thenReturn(Vector.of(new float[]{1f, 0f, 0f}));
-        when(userProfileQueryService.getById(userId)).thenReturn(profileWith(Sex.MALE, null));
+        when(userProfileQueryService.getById(userId)).thenReturn(profileWith(Sex.FEMALE, null));
         when(outfitItemQueryService.sumBasePrice(outfitId)).thenReturn(new BigDecimal("100"));
         when(productSearchService.findNearest(any(), any(), any(), any(), any(), any())).thenReturn(resultsOf());
 

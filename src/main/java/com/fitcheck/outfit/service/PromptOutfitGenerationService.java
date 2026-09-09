@@ -62,7 +62,7 @@ public class PromptOutfitGenerationService {
             Set<String> genders = outfitGenderFilterResolver.allowedGenders(profile.getSex());
             BigDecimal priceCeiling = budgetCeilingResolver.resolve(profile.getAverageBudgetPerOutfit());
 
-            return buildResponses(userId, rawPrompt, query.blueprints(), genders, priceCeiling, query);
+            return buildResponses(userId, rawPrompt, query.blueprints(), genders, priceCeiling, query, matchProfile);
         }
 
         PromptInferredQuery query = extractOrLogFailure(
@@ -71,7 +71,7 @@ public class PromptOutfitGenerationService {
         Set<String> genders = query.genders();
         BigDecimal priceCeiling = budgetCeilingResolver.resolve(query.budget());
 
-        return buildResponses(userId, rawPrompt, query.blueprints(), genders, priceCeiling, query);
+        return buildResponses(userId, rawPrompt, query.blueprints(), genders, priceCeiling, query, matchProfile);
     }
 
     private <T> T extractOrLogFailure(UUID userId, String rawPrompt, Function<String, T> extractor) {
@@ -84,7 +84,8 @@ public class PromptOutfitGenerationService {
     }
 
     private List<OutfitResponse> buildResponses(UUID userId, String rawPrompt, List<OutfitBlueprint> blueprints,
-                                                Set<String> genders, BigDecimal priceCeiling, Object loggedQuery) {
+                                                Set<String> genders, BigDecimal priceCeiling, Object loggedQuery,
+                                                boolean matchProfile) {
         List<BlueprintResult> pool = new ArrayList<>();
         for (OutfitBlueprint blueprint : blueprints) {
             if (pool.size() >= properties.generationPoolSize()) {
@@ -105,16 +106,26 @@ public class PromptOutfitGenerationService {
 
         List<WinningOutfit> winners = selectTopUniqueCombinations(sortedPool);
 
+        List<OutfitPersistenceService.PersistenceCandidate> candidates = winners.stream()
+                .map(winner -> new OutfitPersistenceService.PersistenceCandidate(
+                        winner.products(), winner.breakdown(), winner.itemSetHash(), OutfitSource.AI_PROMPT))
+                .toList();
+        List<Outfit> outfits = outfitPersistenceService.saveOrReuseBatch(candidates);
+
+        List<UUID> outfitIds = outfits.stream().map(Outfit::getId).toList();
+        Map<UUID, List<OutfitItemView>> itemViewsByOutfitId = outfitItemQueryService.findItemViewsForOutfits(outfitIds);
+        Map<UUID, BigDecimal> totalPriceByOutfitId = outfitItemQueryService.sumBasePriceForOutfits(outfitIds);
+
         List<OutfitResponse> responses = new ArrayList<>();
-        for (WinningOutfit winner : winners) {
-            Outfit outfit = outfitPersistenceService.saveOrReuse(
-                    winner.products(), winner.breakdown(), winner.itemSetHash(), OutfitSource.AI_PROMPT);
-            List<OutfitItemView> items = outfitItemQueryService.findItemViews(outfit.getId());
-            BigDecimal totalPrice = outfitItemQueryService.sumBasePrice(outfit.getId());
-            responses.add(new OutfitResponse(outfit.getId(), winner.breakdown(), totalPrice, items));
+        for (int i = 0; i < winners.size(); i++) {
+            Outfit outfit = outfits.get(i);
+            WinningOutfit winner = winners.get(i);
+            responses.add(new OutfitResponse(outfit.getId(), winner.breakdown(),
+                    totalPriceByOutfitId.get(outfit.getId()), itemViewsByOutfitId.get(outfit.getId())));
         }
 
-        aiPromptQueryService.logSuccess(userId, rawPrompt, loggedQuery, responses.get(0).outfitId());
+        aiPromptQueryService.logSuccess(userId, rawPrompt, loggedQuery, matchProfile,
+                responses.stream().map(OutfitResponse::outfitId).toList());
 
         return responses;
     }

@@ -10,6 +10,7 @@ import java.util.Set;
 public class OutfitGenderFilterResolver {
 
     public static final Set<String> ALL_GENDERS = Set.of("Men", "Women", "Boys", "Girls", "Unisex");
+    private static final String UNISEX = "Unisex";
     private static final Map<Sex, Set<String>> GENDER_FILTERS = Map.of(
             Sex.MALE, Set.of("Men", "Unisex"),
             Sex.FEMALE, Set.of("Women", "Unisex"),
@@ -18,5 +19,12 @@ public class OutfitGenderFilterResolver {
 
     public Set<String> allowedGenders(Sex sex) {
         return sex == null ? ALL_GENDERS : GENDER_FILTERS.get(sex);
+    }
+
+    public Set<String> compatibleGenders(String productGender) {
+        if (productGender == null || UNISEX.equals(productGender)) {
+            return ALL_GENDERS;
+        }
+        return Set.of(productGender, UNISEX);
     }
 }

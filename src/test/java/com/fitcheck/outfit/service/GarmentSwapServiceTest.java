@@ -17,8 +17,6 @@ import com.fitcheck.outfit.dto.OutfitResponse;
 import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.entity.OutfitItem;
 import com.fitcheck.outfit.entity.OutfitSource;
-import com.fitcheck.outfit.repository.OutfitItemRepository;
-import com.fitcheck.outfit.repository.OutfitRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,12 +45,6 @@ import static org.mockito.Mockito.when;
 class GarmentSwapServiceTest {
 
     @Mock
-    private OutfitItemRepository outfitItemRepository;
-
-    @Mock
-    private OutfitRepository outfitRepository;
-
-    @Mock
     private OutfitItemQueryService outfitItemQueryService;
 
     @Mock
@@ -69,7 +61,7 @@ class GarmentSwapServiceTest {
 
     private OutfitGenderFilterResolver genderFilterResolver;
     private OutfitItemSetHasher itemSetHasher;
-    private OutfitGenerationProperties generationProperties;
+    private BudgetCeilingResolver budgetCeilingResolver;
     private OutfitSwapProperties swapProperties;
 
     private GarmentSwapService service;
@@ -78,12 +70,12 @@ class GarmentSwapServiceTest {
     void setUp() {
         genderFilterResolver = new OutfitGenderFilterResolver();
         itemSetHasher = new OutfitItemSetHasher();
-        generationProperties = new OutfitGenerationProperties(50, 500, new BigDecimal("0.10"), 15, 3);
+        OutfitGenerationProperties generationProperties = new OutfitGenerationProperties(50, 500, new BigDecimal("0.10"), 15, 3);
+        budgetCeilingResolver = new BudgetCeilingResolver(generationProperties);
         swapProperties = new OutfitSwapProperties(20);
         service = new GarmentSwapService(
-                outfitItemRepository, outfitRepository, outfitItemQueryService, productSearchService,
-                compatibilityScorer, genderFilterResolver, itemSetHasher, outfitPersistenceService,
-                userProfileQueryService, generationProperties, swapProperties);
+                outfitItemQueryService, productSearchService, compatibilityScorer, genderFilterResolver,
+                itemSetHasher, outfitPersistenceService, userProfileQueryService, budgetCeilingResolver, swapProperties);
     }
 
     // ---------- listAlternatives ----------
@@ -93,7 +85,8 @@ class GarmentSwapServiceTest {
         UUID outfitId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
-        when(outfitRepository.findById(outfitId)).thenReturn(Optional.empty());
+        when(outfitItemQueryService.loadContext(outfitId, itemId))
+                .thenThrow(new ResourceNotFoundException("Outfit not found: " + outfitId));
 
         assertThatThrownBy(() -> service.listAlternatives(outfitId, itemId, userId))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -104,9 +97,8 @@ class GarmentSwapServiceTest {
         UUID outfitId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
-        when(outfitRepository.findById(outfitId)).thenReturn(Optional.of(Outfit.builder().id(outfitId).build()));
-        when(outfitItemRepository.findByOutfitId(outfitId)).thenReturn(List.of(
-                outfitItem(UUID.randomUUID(), productWith(UUID.randomUUID(), "Jeans", "Men", new BigDecimal("60"), GarmentRole.BOTTOM))));
+        when(outfitItemQueryService.loadContext(outfitId, itemId))
+                .thenThrow(new ResourceNotFoundException("Outfit item " + itemId + " not found in outfit " + outfitId));
 
         assertThatThrownBy(() -> service.listAlternatives(outfitId, itemId, userId))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -199,7 +191,7 @@ class GarmentSwapServiceTest {
     }
 
     @Test
-    void listAlternatives_queriesByTargetArticleTypeResolvedGendersAndExcludesTargetProductId() {
+    void listAlternatives_queriesByTargetArticleTypeGenderCompatibleWithTargetItemAndExcludesTargetProductId() {
         UUID outfitId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
@@ -214,7 +206,7 @@ class GarmentSwapServiceTest {
         service.listAlternatives(outfitId, itemId, userId);
 
         ArgumentCaptor<Limit> limitCaptor = ArgumentCaptor.forClass(Limit.class);
-        verify(productSearchService).findAlternatives(eq("Tshirts"), eq(java.util.Set.of("Women", "Unisex")),
+        verify(productSearchService).findAlternatives(eq("Tshirts"), eq(java.util.Set.of("Men", "Unisex")),
                 eq(target.getId()), limitCaptor.capture());
         assertThat(limitCaptor.getValue().max()).isEqualTo(20);
     }
@@ -250,7 +242,8 @@ class GarmentSwapServiceTest {
         UUID itemId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        when(outfitRepository.findById(outfitId)).thenReturn(Optional.empty());
+        when(outfitItemQueryService.loadContext(outfitId, itemId))
+                .thenThrow(new ResourceNotFoundException("Outfit not found: " + outfitId));
 
         assertThatThrownBy(() -> service.swap(outfitId, itemId, productId, userId))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -262,9 +255,8 @@ class GarmentSwapServiceTest {
         UUID itemId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        when(outfitRepository.findById(outfitId)).thenReturn(Optional.of(Outfit.builder().id(outfitId).build()));
-        when(outfitItemRepository.findByOutfitId(outfitId)).thenReturn(List.of(
-                outfitItem(UUID.randomUUID(), productWith(UUID.randomUUID(), "Jeans", "Men", new BigDecimal("60"), GarmentRole.BOTTOM))));
+        when(outfitItemQueryService.loadContext(outfitId, itemId))
+                .thenThrow(new ResourceNotFoundException("Outfit item " + itemId + " not found in outfit " + outfitId));
 
         assertThatThrownBy(() -> service.swap(outfitId, itemId, productId, userId))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -470,9 +462,8 @@ class GarmentSwapServiceTest {
 
     private void stubOutfitContext(UUID outfitId, UUID itemId, Product target, Product other) {
         OutfitItem targetItem = outfitItem(itemId, target);
-        OutfitItem otherItem = outfitItem(UUID.randomUUID(), other);
-        when(outfitRepository.findById(outfitId)).thenReturn(Optional.of(Outfit.builder().id(outfitId).build()));
-        when(outfitItemRepository.findByOutfitId(outfitId)).thenReturn(List.of(targetItem, otherItem));
+        when(outfitItemQueryService.loadContext(outfitId, itemId))
+                .thenReturn(new OutfitItemQueryService.OutfitItemContext(targetItem, List.of(other)));
     }
 
     private Product productWith(UUID id, String articleType, String gender, BigDecimal basePrice, GarmentRole role) {

@@ -37,9 +37,8 @@ public class AiPromptQuery extends AuditableEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     private String structuredQuery;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "resulting_outfit_id")
-    private Outfit resultingOutfit;
+    @Column(nullable = false)
+    private boolean matchProfile;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

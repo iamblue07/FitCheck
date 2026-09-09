@@ -44,7 +44,7 @@ public class PromptRefinementService {
         String slotDescription = promptExtractionService.extractSingleSlot(rawPrompt, targetProduct.getGarmentRole());
 
         UserProfile profile = userProfileQueryService.getById(userId);
-        Set<String> genders = outfitGenderFilterResolver.allowedGenders(profile.getSex());
+        Set<String> genders = outfitGenderFilterResolver.compatibleGenders(targetProduct.getGender());
         BigDecimal outfitTotal = outfitItemQueryService.sumBasePrice(outfitId);
         BigDecimal queryPriceCeiling = budgetCeilingResolver.resolve(profile.getAverageBudgetPerOutfit());
         BigDecimal budgetCeiling = budgetCeilingResolver.resolveNullable(profile.getAverageBudgetPerOutfit());

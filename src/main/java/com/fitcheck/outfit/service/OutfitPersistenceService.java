@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -68,11 +70,69 @@ public class OutfitPersistenceService {
         }
     }
 
+    @Transactional
+    public List<Outfit> saveOrReuseBatch(List<PersistenceCandidate> candidates) {
+        List<String> hashes = candidates.stream().map(PersistenceCandidate::itemSetHash).toList();
+        Map<String, Outfit> resolvedByHash = new HashMap<>();
+        for (Outfit outfit : outfitRepository.findByItemSetHashIn(hashes)) {
+            resolvedByHash.put(outfit.getItemSetHash(), outfit);
+        }
+
+        List<OutfitItem> newItems = new ArrayList<>();
+        List<Outfit> results = new ArrayList<>(candidates.size());
+
+        for (PersistenceCandidate candidate : candidates) {
+            Outfit outfit = resolvedByHash.get(candidate.itemSetHash());
+            if (outfit == null) {
+                try {
+                    outfit = saveNewOutfitRow(candidate);
+                    newItems.addAll(buildOutfitItems(outfit, candidate.products()));
+                } catch (DataIntegrityViolationException e) {
+                    outfit = findExisting(candidate.itemSetHash())
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Outfit insert failed on unique constraint but no existing row found for hash "
+                                            + candidate.itemSetHash(), e));
+                }
+                resolvedByHash.put(candidate.itemSetHash(), outfit);
+            }
+            results.add(outfit);
+        }
+
+        outfitItemRepository.saveAll(newItems);
+
+        return results;
+    }
+
+    private Outfit saveNewOutfitRow(PersistenceCandidate candidate) {
+        Outfit outfit = Outfit.builder()
+                .source(candidate.source())
+                .compatibilityScore(candidate.breakdown().finalScore())
+                .colorScore(candidate.breakdown().colorScore())
+                .layeringScore(candidate.breakdown().layeringScore())
+                .structuredScore(candidate.breakdown().structuredScore())
+                .embeddingScore(candidate.breakdown().embeddingScore())
+                .itemSetHash(candidate.itemSetHash())
+                .build();
+        return outfitRepository.saveAndFlush(outfit);
+    }
+
+    private List<OutfitItem> buildOutfitItems(Outfit outfit, List<Product> products) {
+        List<OutfitItem> items = new ArrayList<>();
+        for (Product product : products) {
+            items.add(buildOutfitItem(outfit, product));
+        }
+        return items;
+    }
+
     private OutfitItem buildOutfitItem(Outfit outfit, Product product) {
         return OutfitItem.builder()
                 .outfit(outfit)
                 .product(product)
                 .slot(product.getGarmentRole())
                 .build();
+    }
+
+    public record PersistenceCandidate(List<Product> products, CompatibilityScoreBreakdown breakdown,
+                                       String itemSetHash, OutfitSource source) {
     }
 }

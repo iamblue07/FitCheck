@@ -10,7 +10,10 @@ import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -36,8 +39,36 @@ public class OutfitItemQueryService {
                 .toList();
     }
 
+    public Map<UUID, List<OutfitItemView>> findItemViewsForOutfits(List<UUID> outfitIds) {
+        Map<UUID, List<OutfitItemView>> viewsByOutfitId = new HashMap<>();
+        for (UUID outfitId : outfitIds) {
+            viewsByOutfitId.put(outfitId, new ArrayList<>());
+        }
+        for (OutfitItem item : outfitItemRepository.findByOutfitIdIn(outfitIds)) {
+            viewsByOutfitId.get(item.getOutfit().getId()).add(new OutfitItemView(
+                    item.getId(),
+                    item.getProduct().getId(),
+                    item.getProduct().getProductDisplayName(),
+                    item.getProduct().getImageUrl(),
+                    item.getProduct().getBasePrice(),
+                    item.getSlot()));
+        }
+        return viewsByOutfitId;
+    }
+
     public BigDecimal sumBasePrice(UUID outfitId) {
         return outfitItemRepository.sumBasePriceByOutfitId(outfitId);
+    }
+
+    public Map<UUID, BigDecimal> sumBasePriceForOutfits(List<UUID> outfitIds) {
+        Map<UUID, BigDecimal> totalsByOutfitId = new HashMap<>();
+        for (UUID outfitId : outfitIds) {
+            totalsByOutfitId.put(outfitId, BigDecimal.ZERO);
+        }
+        for (OutfitItemRepository.OutfitBasePriceTotal total : outfitItemRepository.sumBasePriceByOutfitIdIn(outfitIds)) {
+            totalsByOutfitId.put(total.getOutfitId(), total.getTotalBasePrice());
+        }
+        return totalsByOutfitId;
     }
 
     public OutfitItemContext loadContext(UUID outfitId, UUID itemId) {

@@ -11,13 +11,13 @@ import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
 import com.fitcheck.outfit.config.OutfitDiversityProperties;
 import com.fitcheck.outfit.config.OutfitGenerationProperties;
 import com.fitcheck.outfit.entity.Outfit;
+import com.fitcheck.outfit.entity.OutfitSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.SearchResult;
 import org.springframework.data.domain.SearchResults;
 
@@ -27,7 +27,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -39,7 +38,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -72,7 +70,7 @@ class OutfitCandidateGeneratorTest {
         genderFilterResolver = new OutfitGenderFilterResolver();
         itemSetHasher = new OutfitItemSetHasher();
         lenient().when(userStylePreferenceQueryService.findPreferredStyleTagIds(any())).thenReturn(Set.of());
-        lenient().when(outfitPersistenceService.saveNew(any(), any(), any(), any()))
+        lenient().when(outfitPersistenceService.saveOrReuse(any(), any(), any(), eq(OutfitSource.PROFILE_GENERATED)))
                 .thenAnswer(invocation -> Outfit.builder()
                         .id(UUID.randomUUID())
                         .itemSetHash(invocation.getArgument(2))
@@ -101,7 +99,7 @@ class OutfitCandidateGeneratorTest {
         OutfitCandidateGenerator generator = generatorWithProperties(5, 20, 1);
 
         assertThat(generator.generate(profile)).isEmpty();
-        verify(outfitPersistenceService, never()).saveNew(any(), any(), any(), any());
+        verify(outfitPersistenceService, never()).saveOrReuse(any(), any(), any(), any());
     }
 
     @Test
@@ -145,7 +143,7 @@ class OutfitCandidateGeneratorTest {
         generator.generate(profile);
 
         ArgumentCaptor<List<Product>> selectedCaptor = ArgumentCaptor.forClass(List.class);
-        verify(outfitPersistenceService, atLeastOnce()).saveNew(selectedCaptor.capture(), any(), any(), any());
+        verify(outfitPersistenceService, atLeastOnce()).saveOrReuse(selectedCaptor.capture(), any(), any(), any());
 
         Map<UUID, Long> anchorUsageCounts = selectedCaptor.getAllValues().stream()
                 .map(selected -> selected.get(0).getId())
@@ -161,30 +159,12 @@ class OutfitCandidateGeneratorTest {
         stubSlotCandidates(GarmentRole.BOTTOM, List.of(productWithRole(GarmentRole.BOTTOM)));
         stubSlotCandidates(GarmentRole.FOOTWEAR, List.of(productWithRole(GarmentRole.FOOTWEAR)));
         Outfit existing = Outfit.builder().id(UUID.randomUUID()).build();
-        when(outfitPersistenceService.findExisting(any())).thenReturn(Optional.of(existing));
+        when(outfitPersistenceService.saveOrReuse(any(), any(), any(), eq(OutfitSource.PROFILE_GENERATED)))
+                .thenReturn(existing);
 
         OutfitCandidateGenerator generator = generatorWithProperties(1, 10, 1);
 
         assertThat(generator.generate(profile)).containsExactly(existing);
-        verify(outfitPersistenceService, never()).saveNew(any(), any(), any(), any());
-    }
-
-    @Test
-    void generate_concurrentInsertRace_reQueriesAndReusesTheWinner() {
-        UserProfile profile = profileWith(Sex.OTHER, new BigDecimal("200"));
-        stubAnchorPools(List.of(productWithRole(GarmentRole.TOP)), List.of());
-        stubSlotCandidates(GarmentRole.BOTTOM, List.of(productWithRole(GarmentRole.BOTTOM)));
-        stubSlotCandidates(GarmentRole.FOOTWEAR, List.of(productWithRole(GarmentRole.FOOTWEAR)));
-        Outfit wonByOtherInvocation = Outfit.builder().id(UUID.randomUUID()).build();
-        when(outfitPersistenceService.findExisting(any()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(wonByOtherInvocation));
-        when(outfitPersistenceService.saveNew(any(), any(), any(), any()))
-                .thenThrow(new DataIntegrityViolationException("duplicate item_set_hash"));
-
-        OutfitCandidateGenerator generator = generatorWithProperties(1, 10, 1);
-
-        assertThat(generator.generate(profile)).containsExactly(wonByOtherInvocation);
     }
 
     @Test
