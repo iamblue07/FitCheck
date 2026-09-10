@@ -1,10 +1,10 @@
 package com.fitcheck.outfit.service;
 
-import com.fitcheck.common.config.OllamaCloudProperties;
+import com.fitcheck.common.ai.properties.OllamaCloudProperties;
 import com.fitcheck.common.exception.ExternalServiceException;
-import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.outfit.config.OutfitPromptProperties;
-import com.fitcheck.outfit.dto.StructuredPromptQuery;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
+import com.fitcheck.outfit.properties.OutfitPromptProperties;
+import com.fitcheck.outfit.domain.StructuredPromptQuery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

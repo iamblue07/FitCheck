@@ -2,7 +2,7 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.exception.ResourceNotFoundException;
-import com.fitcheck.outfit.dto.OutfitItemView;
+import com.fitcheck.outfit.domain.OutfitItemView;
 import com.fitcheck.outfit.entity.OutfitItem;
 import com.fitcheck.outfit.repository.OutfitItemRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;

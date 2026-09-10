@@ -1,9 +1,9 @@
 package com.fitcheck.outfit.controller;
 
-import com.fitcheck.common.security.JwtConfig;
-import com.fitcheck.common.security.RestAccessDeniedHandler;
-import com.fitcheck.common.security.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.SecurityConfig;
+import com.fitcheck.common.security.config.JwtConfig;
+import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
+import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
+import com.fitcheck.common.security.config.SecurityConfig;
 import com.fitcheck.identity.service.AppUserDetailsService;
 import com.fitcheck.outfit.service.GarmentSwapService;
 import org.junit.jupiter.api.Test;

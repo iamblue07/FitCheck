@@ -1,5 +1,7 @@
 package com.fitcheck.outfit.dto;
 
+import com.fitcheck.outfit.domain.CompatibilityScoreBreakdown;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 

@@ -1,5 +1,6 @@
 package com.fitcheck.common.exception;
 
+import com.fitcheck.common.exception.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

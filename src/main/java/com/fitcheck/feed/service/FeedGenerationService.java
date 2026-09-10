@@ -1,10 +1,12 @@
 package com.fitcheck.feed.service;
 
-import com.fitcheck.feed.config.FeedProperties;
+import com.fitcheck.feed.properties.FeedProperties;
 import com.fitcheck.feed.dto.FeedCursor;
 import com.fitcheck.feed.dto.FeedPage;
 import com.fitcheck.feed.entity.FeedEntry;
 import com.fitcheck.feed.repository.FeedEntryRepository;
+import com.fitcheck.feed.support.FeedCursorCodec;
+import com.fitcheck.feed.support.FeedRefillGuard;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.service.UserProfileQueryService;
 import com.fitcheck.identity.service.UserStylePreferenceQueryService;

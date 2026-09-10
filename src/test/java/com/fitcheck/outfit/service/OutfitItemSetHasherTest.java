@@ -1,6 +1,7 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.outfit.support.OutfitItemSetHasher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

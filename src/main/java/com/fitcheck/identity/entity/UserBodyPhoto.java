@@ -1,6 +1,7 @@
 package com.fitcheck.identity.entity;
 
 import com.fitcheck.common.persistence.AuditableEntity;
+import com.fitcheck.identity.enums.PhotoType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

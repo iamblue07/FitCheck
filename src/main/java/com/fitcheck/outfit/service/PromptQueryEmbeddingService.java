@@ -1,7 +1,7 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.common.ai.EmbeddingVectorTruncator;
+import com.fitcheck.common.ai.util.EmbeddingVectorTruncator;
 import lombok.AllArgsConstructor;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.data.domain.Vector;

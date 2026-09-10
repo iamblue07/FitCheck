@@ -1,6 +1,7 @@
 package com.fitcheck.outfit.entity;
 
 import com.fitcheck.common.persistence.AuditableEntity;
+import com.fitcheck.outfit.enums.OutfitSource;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

@@ -9,7 +9,7 @@ import com.fitcheck.outfit.dto.OutfitResponse;
 import com.fitcheck.outfit.dto.PromptGenerationRequest;
 import com.fitcheck.outfit.dto.PromptRefinementRequest;
 import com.fitcheck.outfit.service.PromptOutfitGenerationService;
-import com.fitcheck.outfit.service.PromptRateLimitResolver;
+import com.fitcheck.outfit.support.PromptRateLimitResolver;
 import com.fitcheck.outfit.service.PromptRefinementService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;

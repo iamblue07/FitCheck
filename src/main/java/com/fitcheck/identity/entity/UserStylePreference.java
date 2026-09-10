@@ -1,7 +1,7 @@
 package com.fitcheck.identity.entity;
 
 import com.fitcheck.common.persistence.BaseEntity;
-import com.fitcheck.common.taxonomy.StyleTag;
+import com.fitcheck.common.taxonomy.entity.StyleTag;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;

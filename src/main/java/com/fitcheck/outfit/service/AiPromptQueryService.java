@@ -6,7 +6,7 @@ import com.fitcheck.common.exception.ExternalServiceException;
 import com.fitcheck.identity.service.UserReferenceQueryService;
 import com.fitcheck.outfit.entity.AiPromptQuery;
 import com.fitcheck.outfit.entity.AiPromptQueryOutfit;
-import com.fitcheck.outfit.entity.AiPromptQueryStatus;
+import com.fitcheck.outfit.enums.AiPromptQueryStatus;
 import com.fitcheck.outfit.repository.AiPromptQueryOutfitRepository;
 import com.fitcheck.outfit.repository.AiPromptQueryRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;

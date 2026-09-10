@@ -1,6 +1,6 @@
 package com.fitcheck.identity.dto;
 
-import com.fitcheck.identity.entity.Sex;
+import com.fitcheck.identity.enums.Sex;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.PositiveOrZero;

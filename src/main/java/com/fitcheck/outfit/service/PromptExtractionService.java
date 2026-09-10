@@ -1,12 +1,13 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.common.exception.ExternalServiceException;
-import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.outfit.config.OutfitPromptProperties;
-import com.fitcheck.outfit.dto.OutfitBlueprint;
-import com.fitcheck.outfit.dto.PromptInferredQuery;
-import com.fitcheck.outfit.dto.SlotDescription;
-import com.fitcheck.outfit.dto.StructuredPromptQuery;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
+import com.fitcheck.outfit.properties.OutfitPromptProperties;
+import com.fitcheck.outfit.domain.OutfitBlueprint;
+import com.fitcheck.outfit.domain.PromptInferredQuery;
+import com.fitcheck.outfit.domain.SlotDescription;
+import com.fitcheck.outfit.domain.StructuredPromptQuery;
+import com.fitcheck.outfit.support.OutfitGenderFilterResolver;
 import lombok.AllArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.ollama.OllamaChatModel;
@@ -18,7 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.fitcheck.common.config.OllamaCloudProperties;
+import com.fitcheck.common.ai.properties.OllamaCloudProperties;
 
 @Service
 @AllArgsConstructor

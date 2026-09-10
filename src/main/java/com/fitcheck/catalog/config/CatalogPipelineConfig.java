@@ -1,5 +1,6 @@
 package com.fitcheck.catalog.config;
 
+import com.fitcheck.catalog.properties.CatalogEnrichmentProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

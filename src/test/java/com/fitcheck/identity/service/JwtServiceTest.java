@@ -1,7 +1,7 @@
 package com.fitcheck.identity.service;
 
-import com.fitcheck.common.security.JwtProperties;
-import com.fitcheck.identity.entity.Role;
+import com.fitcheck.common.security.properties.JwtProperties;
+import com.fitcheck.identity.enums.Role;
 import com.fitcheck.identity.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

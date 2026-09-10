@@ -1,7 +1,7 @@
 package com.fitcheck.catalog.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.common.ai.EmbeddingVectorTruncator;
+import com.fitcheck.common.ai.util.EmbeddingVectorTruncator;
 import lombok.AllArgsConstructor;
 import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

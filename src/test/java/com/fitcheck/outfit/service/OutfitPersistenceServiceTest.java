@@ -1,11 +1,11 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
+import com.fitcheck.outfit.domain.CompatibilityScoreBreakdown;
 import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.entity.OutfitItem;
-import com.fitcheck.outfit.entity.OutfitSource;
+import com.fitcheck.outfit.enums.OutfitSource;
 import com.fitcheck.outfit.repository.OutfitItemRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;
 import org.junit.jupiter.api.BeforeEach;

@@ -1,10 +1,10 @@
 package com.fitcheck.catalog.pipeline;
 
-import com.fitcheck.catalog.config.GarmentRoleBackfillProperties;
+import com.fitcheck.catalog.properties.GarmentRoleBackfillProperties;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.repository.ProductRepository;
-import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.common.taxonomy.GarmentRoleResolver;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
+import com.fitcheck.common.taxonomy.support.GarmentRoleResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

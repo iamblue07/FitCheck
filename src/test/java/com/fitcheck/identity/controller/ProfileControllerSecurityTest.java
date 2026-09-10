@@ -1,12 +1,12 @@
 package com.fitcheck.identity.controller;
 
-import com.fitcheck.common.security.JwtConfig;
-import com.fitcheck.common.security.RestAccessDeniedHandler;
-import com.fitcheck.common.security.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.SecurityConfig;
+import com.fitcheck.common.security.config.JwtConfig;
+import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
+import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
+import com.fitcheck.common.security.config.SecurityConfig;
 import com.fitcheck.identity.dto.StyleTagResponse;
 import com.fitcheck.identity.dto.UserProfileResponse;
-import com.fitcheck.identity.entity.Sex;
+import com.fitcheck.identity.enums.Sex;
 import com.fitcheck.identity.service.AppUserDetailsService;
 import com.fitcheck.identity.service.ProfileService;
 import org.junit.jupiter.api.Test;

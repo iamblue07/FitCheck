@@ -2,11 +2,11 @@ package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.BadRequestException;
 import com.fitcheck.common.exception.ExternalServiceException;
-import com.fitcheck.common.storage.StorageKeys;
-import com.fitcheck.common.storage.StorageService;
+import com.fitcheck.common.storage.util.StorageKeys;
+import com.fitcheck.common.storage.service.StorageService;
 import com.fitcheck.identity.dto.PresignedUploadResponse;
 import com.fitcheck.identity.dto.UserPhotoResponse;
-import com.fitcheck.identity.entity.PhotoType;
+import com.fitcheck.identity.enums.PhotoType;
 import com.fitcheck.identity.entity.User;
 import com.fitcheck.identity.entity.UserBodyPhoto;
 import com.fitcheck.identity.repository.UserBodyPhotoRepository;

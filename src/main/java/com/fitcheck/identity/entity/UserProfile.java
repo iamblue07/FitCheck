@@ -1,5 +1,6 @@
 package com.fitcheck.identity.entity;
 
+import com.fitcheck.identity.enums.Sex;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.LastModifiedDate;

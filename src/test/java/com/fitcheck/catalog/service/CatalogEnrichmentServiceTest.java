@@ -2,12 +2,12 @@ package com.fitcheck.catalog.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.entity.ProductStyleTag;
-import com.fitcheck.catalog.config.CatalogEnrichmentProperties;
-import com.fitcheck.catalog.dto.ProductEnrichmentResult;
+import com.fitcheck.catalog.properties.CatalogEnrichmentProperties;
+import com.fitcheck.catalog.domain.ProductEnrichmentResult;
 import com.fitcheck.catalog.repository.ProductRepository;
 import com.fitcheck.catalog.repository.ProductStyleTagRepository;
-import com.fitcheck.common.taxonomy.StyleTag;
-import com.fitcheck.common.taxonomy.StyleTagRepository;
+import com.fitcheck.common.taxonomy.entity.StyleTag;
+import com.fitcheck.common.taxonomy.repository.StyleTagRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

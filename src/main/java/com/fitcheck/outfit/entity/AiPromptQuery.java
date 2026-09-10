@@ -2,6 +2,7 @@ package com.fitcheck.outfit.entity;
 
 import com.fitcheck.common.persistence.AuditableEntity;
 import com.fitcheck.identity.entity.User;
+import com.fitcheck.outfit.enums.AiPromptQueryStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

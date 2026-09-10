@@ -1,7 +1,7 @@
 package com.fitcheck.catalog.repository;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
 import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Score;

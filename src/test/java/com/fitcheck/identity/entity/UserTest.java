@@ -1,5 +1,6 @@
 package com.fitcheck.identity.entity;
 
+import com.fitcheck.identity.enums.Role;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

@@ -1,10 +1,10 @@
 package com.fitcheck.catalog.service;
 
 import com.fitcheck.catalog.entity.Product;
-import com.fitcheck.catalog.dto.ProductEnrichmentResult;
+import com.fitcheck.catalog.domain.ProductEnrichmentResult;
 import com.fitcheck.common.exception.ExternalServiceException;
-import com.fitcheck.common.taxonomy.StyleTag;
-import com.fitcheck.common.taxonomy.StyleTagRepository;
+import com.fitcheck.common.taxonomy.entity.StyleTag;
+import com.fitcheck.common.taxonomy.repository.StyleTagRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;

@@ -2,9 +2,9 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.exception.BadRequestException;
-import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
-import com.fitcheck.outfit.dto.CompatibilityScoreBreakdown;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
+import com.fitcheck.outfit.properties.OutfitCompatibilityProperties;
+import com.fitcheck.outfit.domain.CompatibilityScoreBreakdown;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;

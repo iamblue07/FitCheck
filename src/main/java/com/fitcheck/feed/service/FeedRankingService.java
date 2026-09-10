@@ -1,10 +1,10 @@
 package com.fitcheck.feed.service;
 
 import com.fitcheck.catalog.service.ProductStyleTagQueryService;
-import com.fitcheck.feed.config.FeedRankingProperties;
+import com.fitcheck.feed.properties.FeedRankingProperties;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.outfit.entity.Outfit;
-import com.fitcheck.outfit.config.OutfitGenerationProperties;
+import com.fitcheck.outfit.properties.OutfitGenerationProperties;
 import com.fitcheck.outfit.service.OutfitItemQueryService;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

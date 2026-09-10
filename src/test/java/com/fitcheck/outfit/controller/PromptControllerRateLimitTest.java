@@ -2,14 +2,14 @@ package com.fitcheck.outfit.controller;
 
 import com.fitcheck.common.exception.RateLimitExceededException;
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
-import com.fitcheck.identity.entity.Role;
+import com.fitcheck.identity.enums.Role;
 import com.fitcheck.identity.entity.User;
 import com.fitcheck.identity.service.UserReferenceQueryService;
-import com.fitcheck.outfit.config.OutfitPromptProperties;
+import com.fitcheck.outfit.properties.OutfitPromptProperties;
 import com.fitcheck.outfit.dto.OutfitResponse;
 import com.fitcheck.outfit.dto.PromptGenerationRequest;
 import com.fitcheck.outfit.service.PromptOutfitGenerationService;
-import com.fitcheck.outfit.service.PromptRateLimitResolver;
+import com.fitcheck.outfit.support.PromptRateLimitResolver;
 import com.fitcheck.outfit.service.PromptRefinementService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

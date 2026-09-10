@@ -1,6 +1,6 @@
 package com.fitcheck.identity.repository;
 
-import com.fitcheck.identity.entity.PhotoType;
+import com.fitcheck.identity.enums.PhotoType;
 import com.fitcheck.identity.entity.UserBodyPhoto;
 import org.springframework.data.jpa.repository.JpaRepository;
 

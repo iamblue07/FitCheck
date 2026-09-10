@@ -1,6 +1,6 @@
 package com.fitcheck.identity.dto;
 
-import com.fitcheck.identity.entity.PhotoType;
+import com.fitcheck.identity.enums.PhotoType;
 
 public record UserPhotoResponse(
 

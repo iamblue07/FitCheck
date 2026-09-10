@@ -1,5 +1,6 @@
 package com.fitcheck.common.exception;
 
+import com.fitcheck.common.exception.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

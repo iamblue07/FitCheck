@@ -1,6 +1,6 @@
 package com.fitcheck.feed.dto;
 
-import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
 
 import java.math.BigDecimal;
 import java.util.UUID;

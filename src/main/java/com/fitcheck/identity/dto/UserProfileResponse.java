@@ -1,6 +1,6 @@
 package com.fitcheck.identity.dto;
 
-import com.fitcheck.identity.entity.Sex;
+import com.fitcheck.identity.enums.Sex;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

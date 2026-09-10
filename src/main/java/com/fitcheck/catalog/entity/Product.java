@@ -1,7 +1,7 @@
 package com.fitcheck.catalog.entity;
 
 import com.fitcheck.common.persistence.AuditableEntity;
-import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

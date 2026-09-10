@@ -2,14 +2,14 @@ package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.ConflictException;
 import com.fitcheck.common.exception.UnauthorizedException;
-import com.fitcheck.common.security.JwtProperties;
+import com.fitcheck.common.security.properties.JwtProperties;
 import com.fitcheck.identity.dto.AuthResponse;
 import com.fitcheck.identity.dto.LoginRequest;
 import com.fitcheck.identity.dto.LogoutRequest;
 import com.fitcheck.identity.dto.RefreshRequest;
 import com.fitcheck.identity.dto.RegisterRequest;
 import com.fitcheck.identity.entity.RefreshToken;
-import com.fitcheck.identity.entity.Role;
+import com.fitcheck.identity.enums.Role;
 import com.fitcheck.identity.entity.User;
 import com.fitcheck.identity.entity.UserProfile;
 import com.fitcheck.identity.repository.RefreshTokenRepository;

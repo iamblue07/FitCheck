@@ -2,7 +2,7 @@ package com.fitcheck.outfit.entity;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.persistence.BaseEntity;
-import com.fitcheck.common.taxonomy.GarmentRole;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

@@ -2,8 +2,8 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.exception.BadRequestException;
-import com.fitcheck.common.taxonomy.GarmentRole;
-import com.fitcheck.outfit.config.OutfitCompatibilityProperties;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
+import com.fitcheck.outfit.properties.OutfitCompatibilityProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

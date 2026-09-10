@@ -1,6 +1,6 @@
 package com.fitcheck.identity.service;
 
-import com.fitcheck.common.security.JwtProperties;
+import com.fitcheck.common.security.properties.JwtProperties;
 import com.fitcheck.identity.entity.User;
 import lombok.AllArgsConstructor;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;

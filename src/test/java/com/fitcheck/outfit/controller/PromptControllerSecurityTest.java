@@ -1,17 +1,17 @@
 package com.fitcheck.outfit.controller;
 
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
-import com.fitcheck.common.security.JwtConfig;
-import com.fitcheck.common.security.RestAccessDeniedHandler;
-import com.fitcheck.common.security.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.SecurityConfig;
-import com.fitcheck.identity.entity.Role;
+import com.fitcheck.common.security.config.JwtConfig;
+import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
+import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
+import com.fitcheck.common.security.config.SecurityConfig;
+import com.fitcheck.identity.enums.Role;
 import com.fitcheck.identity.entity.User;
 import com.fitcheck.identity.service.AppUserDetailsService;
 import com.fitcheck.identity.service.UserReferenceQueryService;
 import com.fitcheck.outfit.dto.OutfitResponse;
 import com.fitcheck.outfit.service.PromptOutfitGenerationService;
-import com.fitcheck.outfit.service.PromptRateLimitResolver;
+import com.fitcheck.outfit.support.PromptRateLimitResolver;
 import com.fitcheck.outfit.service.PromptRefinementService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
