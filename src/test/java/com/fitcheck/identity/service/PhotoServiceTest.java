@@ -2,6 +2,7 @@ package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.BadRequestException;
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.exception.ResourceNotFoundException;
 import com.fitcheck.common.storage.util.StorageKeys;
 import com.fitcheck.common.storage.service.StorageService;
 import com.fitcheck.identity.dto.PresignedUploadResponse;
@@ -218,5 +219,51 @@ class PhotoServiceTest {
                 .isInstanceOf(ExternalServiceException.class);
 
         verify(userBodyPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void getStorageKey_photoExists_returnsItsStorageKey() {
+        UUID userId = UUID.randomUUID();
+        String key = StorageKeys.bodyPhotoKey(userId, "front");
+        UserBodyPhoto existingPhoto = UserBodyPhoto.builder()
+                .user(User.builder().id(userId).build())
+                .photoType(PhotoType.FRONT)
+                .storageKey(key)
+                .build();
+        when(userBodyPhotoRepository.findByUserIdAndPhotoType(userId, PhotoType.FRONT))
+                .thenReturn(Optional.of(existingPhoto));
+
+        String result = photoService.getStorageKey(userId, PhotoType.FRONT);
+
+        assertThat(result).isEqualTo(key);
+    }
+
+    @Test
+    void getStorageKey_backPhotoType_looksUpByBackType() {
+        UUID userId = UUID.randomUUID();
+        String key = StorageKeys.bodyPhotoKey(userId, "back");
+        UserBodyPhoto existingPhoto = UserBodyPhoto.builder()
+                .user(User.builder().id(userId).build())
+                .photoType(PhotoType.BACK)
+                .storageKey(key)
+                .build();
+        when(userBodyPhotoRepository.findByUserIdAndPhotoType(userId, PhotoType.BACK))
+                .thenReturn(Optional.of(existingPhoto));
+
+        String result = photoService.getStorageKey(userId, PhotoType.BACK);
+
+        assertThat(result).isEqualTo(key);
+        verify(userBodyPhotoRepository, never()).findByUserIdAndPhotoType(userId, PhotoType.FRONT);
+    }
+
+    @Test
+    void getStorageKey_noPhotoUploadedForType_throwsResourceNotFoundException() {
+        UUID userId = UUID.randomUUID();
+        when(userBodyPhotoRepository.findByUserIdAndPhotoType(userId, PhotoType.FRONT)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> photoService.getStorageKey(userId, PhotoType.FRONT))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("front")
+                .hasMessageContaining(userId.toString());
     }
 }

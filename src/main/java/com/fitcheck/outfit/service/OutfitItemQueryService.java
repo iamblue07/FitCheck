@@ -2,7 +2,9 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.exception.ResourceNotFoundException;
+import com.fitcheck.common.taxonomy.enums.GarmentRole;
 import com.fitcheck.outfit.domain.OutfitItemView;
+import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.entity.OutfitItem;
 import com.fitcheck.outfit.repository.OutfitItemRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +22,14 @@ import java.util.UUID;
 @Service
 @AllArgsConstructor
 public class OutfitItemQueryService {
+
+    private static final List<GarmentRole> TRY_ON_ORDER = List.of(
+            GarmentRole.FULL_BODY,
+            GarmentRole.BOTTOM,
+            GarmentRole.TOP,
+            GarmentRole.OUTERWEAR,
+            GarmentRole.FOOTWEAR,
+            GarmentRole.ACCESSORY);
 
     private final OutfitItemRepository outfitItemRepository;
     private final OutfitRepository outfitRepository;
@@ -89,6 +100,20 @@ public class OutfitItemQueryService {
                 .toList();
 
         return new OutfitItemContext(targetItem, otherProducts);
+    }
+
+    public List<Product> findProductsForTryon(UUID outfitId) {
+        outfitRepository.findById(outfitId)
+                .orElseThrow(() -> new ResourceNotFoundException("Outfit not found: " + outfitId));
+
+        return outfitItemRepository.findByOutfitId(outfitId).stream()
+                .sorted(Comparator.comparingInt(item -> TRY_ON_ORDER.indexOf(item.getSlot())))
+                .map(OutfitItem::getProduct)
+                .toList();
+    }
+
+    public Outfit getReference(UUID outfitId) {
+        return outfitRepository.getReferenceById(outfitId);
     }
 
     public record OutfitItemContext(OutfitItem targetItem, List<Product> otherProducts) {

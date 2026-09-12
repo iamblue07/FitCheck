@@ -1,6 +1,7 @@
 package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.BadRequestException;
+import com.fitcheck.common.exception.ResourceNotFoundException;
 import com.fitcheck.common.storage.util.StorageKeys;
 import com.fitcheck.common.storage.service.StorageService;
 import com.fitcheck.identity.dto.PresignedUploadResponse;
@@ -58,6 +59,13 @@ public class PhotoService {
         return userBodyPhotoRepository.findAllByUserId(userId).stream()
                 .map(this::toPhotoResponse)
                 .toList();
+    }
+
+    public String getStorageKey(UUID userId, PhotoType photoType) {
+        return userBodyPhotoRepository.findByUserIdAndPhotoType(userId, photoType)
+                .map(UserBodyPhoto::getStorageKey)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No " + photoType.name().toLowerCase() + " body photo found for user " + userId));
     }
 
     private UserBodyPhoto newPhoto(UUID userId, PhotoType photoType) {
