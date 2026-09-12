@@ -18,7 +18,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 - **Backend**: Java 21+, Spring Boot 4.1+, Maven
 - **Database**: PostgreSQL 18 with `pgvector` — native installation for local dev, [Aiven](https://aiven.io) (free tier) for hosting; nearest-neighbor candidate retrieval via Spring Data JPA's native vector-search support (`Vector`/`ScoringFunction`/`SearchResults`), backed by an HNSW index on `products.text_embedding`
 - **Migrations**: Flyway
-- **AI**: Ollama running Qwen3-VL 4B and Qwen3-Embedding-4B locally for one-time catalog enrichment/embedding (Qwen3-Embedding-4B MRL-truncated to 2000 dimensions); Ollama Cloud for structured extraction from AI-prompt requests (`gpt-oss:20b-cloud` by default); DeepInfra for query-time embeddings against the same open-weight embedding model the catalog already uses, so no catalog re-embed was needed. [FASHN AI](https://fashn.ai) for virtual try-on (not started).
+- **AI**: Ollama running Qwen3-VL 4B and Qwen3-Embedding-4B locally for one-time catalog enrichment/embedding (Qwen3-Embedding-4B MRL-truncated to 2000 dimensions); Ollama Cloud for structured extraction from AI-prompt requests (`gpt-oss:20b-cloud` by default); DeepInfra for query-time embeddings against the same open-weight embedding model the catalog already uses, so no catalog re-embed was needed. [FASHN AI](https://fashn.ai) for virtual try-on — two models, routed by garment type (`tryon-v1.6` for tops/bottoms/full-body, `tryon-max` for footwear/accessories), chained sequentially for a full outfit.
 - **Storage**: Cloudflare R2 (S3-compatible, 10GB free, zero egress) for user photos and generated try-on images
 - **Frontend**: Flutter (not started yet)
 - **Testing**: JUnit 5 + Mockito (automated), Postman (manual)
@@ -39,7 +39,7 @@ Users build a profile (body measurements, style preferences, budget) and upload 
 | 8 | Infinite Scroll Feed | ✅ Done |
 | 9 | Garment Alternatives | ✅ Done |
 | 10 | Prompt-to-Outfit & Prompt-to-Garment-Refinement | ✅ Done |
-| 11 | FASHN AI Integration & Async Job Pipeline | ⬜ Not started |
+| 11 | FASHN AI Integration & Async Job Pipeline | ✅ Done |
 | 12 | Likes, Saves & Shares | ⬜ Not started |
 | 13 | Logging, Security & API Documentation Audit | ⬜ Not started |
 | 14 | Build & Deployment Pipeline | ⬜ Not started |
@@ -70,7 +70,7 @@ A feature only gets the subfolders it actually needs — `outfit` has no `@Confi
 
 `common`'s own submodules (`security`, `storage`, `taxonomy`, `ai`) follow the same typing once they've grown enough to mix layer-types; `ratelimit`, `logging`, and the un-split part of `persistence` haven't, and don't need it forced on them.
 
-What belongs in `common` isn't decided by who currently calls it — it's decided by what the thing *is*. Connection-level infrastructure for a shared external resource (an AI provider's base URL, API key, HTTP client tuning) stays `common` even with one current caller, since any future feature needing that provider would reuse the same wiring rather than redeclare it; what a feature actually *does* with that access stays in the feature. `OllamaCloudConfig`/`DeepInfraEmbeddingConfig` and their properties live in `common.ai.config`/`common.ai.properties` on that basis, even though only `outfit` calls them today.
+What belongs in `common` isn't decided by who currently calls it — it's decided by what the thing *is*. Connection-level infrastructure for a shared external resource (an AI provider's base URL, API key, HTTP client tuning) stays `common` even with one current caller, since any future feature needing that provider would reuse the same wiring rather than redeclare it; what a feature actually *does* with that access stays in the feature. `OllamaCloudConfig`/`DeepInfraEmbeddingConfig`/`FashnConfig` and their properties live in `common.ai.config`/`common.ai.properties` on that basis, even though each currently has only one calling feature (`outfit`, `outfit`, and `tryon` respectively).
 
 Cross-feature reads go through a narrow query-facade service owned by the feature whose data it exposes (e.g. `catalog.service.ProductSearchService`, `identity.service.UserReferenceQueryService`) rather than one feature injecting another's repository directly.
 
@@ -83,14 +83,15 @@ Cross-feature reads go through a narrow query-facade service owned by the featur
 - **Feed**: `GET /api/v1/feed` — cursor-paginated, ranked by a bounded multiplier on the outfit's own compatibility score, permanent never-repeat backed by a real constraint, background refill that never blocks the request that triggered it.
 - **Garment swap**: `GET .../alternatives` (browse) and `POST .../swap` (commit) — candidates matched on the target item's own article type and gender, budget-checked against the whole outfit's total, committed as a new immutable outfit.
 - **AI-prompt generation & refinement**: a free-text prompt becomes a batch of up to 50 scored, deduplicated, diversity-capped outfits, each individually traceable back to the query that produced it; an optional profile-independent mode lets the AI infer gender and budget from the prompt text instead of the caller's profile; every attempt is logged, success or failure, with no silent fallback to a generic result. Single-garment refinement works the same way, scoped to one slot, and commits through the swap endpoint above. Both endpoints are rate-limited per user.
+- **Virtual try-on**: `POST /api/v1/tryon` validates the outfit, returns a `PENDING` job immediately, and chains FASHN AI calls sequentially on a dedicated background thread pool — one garment at a time, in a fixed order (full-body/bottom/top/outerwear/footwear/accessory), each result feeding forward as the next call's input image. `GET /api/v1/tryon/{id}` polls for `PENDING`/`PROCESSING`/`COMPLETE`/`FAILED`; each garment's own status is tracked separately from the request's overall status, so a partial failure is distinguishable from a total one. The final composited image is downloaded from FASHN and stored in R2 like every other generated asset. Rate-limited per user, reusing the same limiter AI-prompt generation uses.
 - **Cross-cutting**: narrow query-facade services for any read that crosses a feature boundary, instead of one feature reaching into another's repository directly.
 
 ## Getting started
 
-Prerequisites: JDK 21+, Maven, PostgreSQL 17+ with the `pgvector` extension, [Ollama](https://ollama.com) with both `qwen3-vl:4b` and `qwen3-embedding:4b` pulled locally (`ollama pull qwen3-vl:4b` and `ollama pull qwen3-embedding:4b`), an [Ollama Cloud](https://ollama.com/cloud) API key, a [DeepInfra](https://deepinfra.com) API key, IntelliJ IDEA (recommended).
+Prerequisites: JDK 21+, Maven, PostgreSQL 17+ with the `pgvector` extension, [Ollama](https://ollama.com) with both `qwen3-vl:4b` and `qwen3-embedding:4b` pulled locally (`ollama pull qwen3-vl:4b` and `ollama pull qwen3-embedding:4b`), an [Ollama Cloud](https://ollama.com/cloud) API key, a [DeepInfra](https://deepinfra.com) API key, a [FASHN AI](https://fashn.ai) API key, IntelliJ IDEA (recommended).
 
 1. Clone the repo.
-2. Create a `.env.local` file at the project root (untracked) with your local Postgres connection details, Cloudflare R2 and JWT settings, the local Ollama/catalog batch variables (`OLLAMA_BASE_URL`, `OLLAMA_ENRICHMENT_MODEL`, `OLLAMA_EMBEDDING_MODEL`, `CATALOG_EMBEDDING_CHUNK_SIZE`, and the rest of the `catalog.*` batch settings), and the AI-provider variables (`OLLAMA_CLOUD_API_KEY`, optionally `OLLAMA_CLOUD_CHAT_MODEL` if you want something other than the `gpt-oss:20b-cloud` default, and `DEEPINFRA_API_KEY`) — see `application.properties` for the full list of expected variables.
+2. Create a `.env.local` file at the project root (untracked) with your local Postgres connection details, Cloudflare R2 and JWT settings, the local Ollama/catalog batch variables (`OLLAMA_BASE_URL`, `OLLAMA_ENRICHMENT_MODEL`, `OLLAMA_EMBEDDING_MODEL`, `CATALOG_EMBEDDING_CHUNK_SIZE`, and the rest of the `catalog.*` batch settings), and the AI-provider variables (`OLLAMA_CLOUD_API_KEY`, optionally `OLLAMA_CLOUD_CHAT_MODEL` if you want something other than the `gpt-oss:20b-cloud` default, `DEEPINFRA_API_KEY`, and `FASHN_API_KEY`) — see `application.properties` for the full list of expected variables.
 3. Make sure Ollama is running locally with both models pulled (check for it in the system tray, or launch it — it does not always survive a reboot reliably on Windows).
 4. Run the app from IntelliJ, or `mvn spring-boot:run`.
 5. Confirm it's up: `GET http://localhost:8080/actuator/health` should return `{"status":"UP"}`.
