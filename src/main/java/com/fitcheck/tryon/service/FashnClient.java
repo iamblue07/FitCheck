@@ -2,6 +2,7 @@ package com.fitcheck.tryon.service;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.logging.enums.ExternalCallOutcome;
 import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.tryon.domain.FashnPredictionResult;
 import com.fitcheck.tryon.properties.TryonProperties;
@@ -50,17 +51,19 @@ public class FashnClient {
                     .retrieve()
                     .body(FashnPredictionResult.class);
         } catch (RestClientException e) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_POLL, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_POLL, elapsedMs(startedAt),
+                    ExternalCallOutcome.RETRYABLE_FAILURE);
             throw new ExternalServiceException(
                     "FASHN poll call failed for prediction " + predictionId + ": " + e.getMessage());
         }
 
         if (result == null) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_POLL, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_POLL, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("FASHN /v1/status returned no body for prediction " + predictionId);
         }
 
-        externalCallLogger.logCall(PROVIDER, OPERATION_POLL, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, OPERATION_POLL, elapsedMs(startedAt), ExternalCallOutcome.SUCCESS);
         return result;
     }
 
@@ -74,16 +77,18 @@ public class FashnClient {
                     .retrieve()
                     .body(FashnPredictionResult.class);
         } catch (RestClientException e) {
-            externalCallLogger.logCall(PROVIDER, operation, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, operation, elapsedMs(startedAt),
+                    ExternalCallOutcome.RETRYABLE_FAILURE);
             throw new ExternalServiceException("FASHN submit call failed: " + e.getMessage());
         }
 
         if (result == null || result.id() == null) {
-            externalCallLogger.logCall(PROVIDER, operation, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, operation, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("FASHN /v1/run returned no prediction id");
         }
 
-        externalCallLogger.logCall(PROVIDER, operation, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, operation, elapsedMs(startedAt), ExternalCallOutcome.SUCCESS);
         return result.id();
     }
 

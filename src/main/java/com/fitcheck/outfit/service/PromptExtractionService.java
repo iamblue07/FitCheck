@@ -1,6 +1,7 @@
 package com.fitcheck.outfit.service;
 
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.logging.enums.ExternalCallOutcome;
 import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.common.taxonomy.enums.GarmentRole;
 import com.fitcheck.outfit.properties.OutfitPromptProperties;
@@ -49,16 +50,18 @@ public class PromptExtractionService {
                     .call()
                     .entity(StructuredPromptQuery.class);
         } catch (RuntimeException e) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Ollama Cloud prompt extraction failed: " + e.getMessage());
         }
 
         if (query == null || query.blueprints() == null || query.blueprints().isEmpty()) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Ollama Cloud prompt extraction returned no usable blueprints");
         }
 
-        externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT, elapsedMs(startedAt), ExternalCallOutcome.SUCCESS);
 
         for (OutfitBlueprint blueprint : query.blueprints()) {
             validateShape(blueprint);
@@ -79,16 +82,19 @@ public class PromptExtractionService {
                     .call()
                     .entity(PromptInferredQuery.class);
         } catch (RuntimeException e) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_INFERRED, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_INFERRED, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Ollama Cloud prompt extraction failed: " + e.getMessage());
         }
 
         if (query == null || query.blueprints() == null || query.blueprints().isEmpty()) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_INFERRED, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_INFERRED, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Ollama Cloud prompt extraction returned no usable blueprints");
         }
 
-        externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_INFERRED, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_INFERRED, elapsedMs(startedAt),
+                ExternalCallOutcome.SUCCESS);
 
         for (OutfitBlueprint blueprint : query.blueprints()) {
             validateShape(blueprint);
@@ -111,16 +117,19 @@ public class PromptExtractionService {
                     .call()
                     .entity(SlotDescription.class);
         } catch (RuntimeException e) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_SINGLE_SLOT, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_SINGLE_SLOT, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Ollama Cloud single-slot prompt extraction failed: " + e.getMessage());
         }
 
         if (result == null || result.description() == null || result.description().isBlank()) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_SINGLE_SLOT, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_SINGLE_SLOT, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Ollama Cloud single-slot prompt extraction returned no usable description");
         }
 
-        externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_SINGLE_SLOT, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, OPERATION_EXTRACT_SINGLE_SLOT, elapsedMs(startedAt),
+                ExternalCallOutcome.SUCCESS);
 
         return result.description();
     }

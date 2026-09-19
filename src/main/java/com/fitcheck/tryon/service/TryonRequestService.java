@@ -6,6 +6,8 @@ import com.fitcheck.common.exception.ResourceNotFoundException;
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.storage.service.StorageService;
 import com.fitcheck.identity.entity.User;
+import com.fitcheck.identity.enums.PhotoType;
+import com.fitcheck.identity.service.PhotoService;
 import com.fitcheck.identity.service.UserReferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.service.OutfitItemQueryService;
@@ -22,6 +24,7 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -43,6 +46,7 @@ public class TryonRequestService {
     private final TryonPersistenceService tryonPersistenceService;
     private final TryonRequestRepository tryonRequestRepository;
     private final UserReferenceQueryService userReferenceQueryService;
+    private final PhotoService photoService;
     private final StorageService storageService;
     private final TryonProperties properties;
     private final TryonJobExecutor tryonJobExecutor;
@@ -60,6 +64,14 @@ public class TryonRequestService {
             log.info("Tryon submit for user {} outfit {} returned in-flight request {} instead of starting a new one",
                     userId, outfitId, existing.getId());
             return new TryonStatusResponse(existing.getId(), existing.getStatus(), null, null);
+        }
+
+        Optional<TryonRequest> reusable = findReusableResult(userId, outfitId);
+        if (reusable.isPresent()) {
+            TryonRequest existing = reusable.get();
+            log.info("Tryon submit for user {} outfit {} reused completed request {} instead of rendering again",
+                    userId, outfitId, existing.getId());
+            return getStatus(userId, existing.getId());
         }
 
         boolean consumed = inMemoryRateLimiter.tryConsume(
@@ -102,5 +114,23 @@ public class TryonRequestService {
 
         return new TryonStatusResponse(
                 tryonRequest.getId(), tryonRequest.getStatus(), resultImageUrl, tryonRequest.getErrorMessage());
+    }
+
+    private Optional<TryonRequest> findReusableResult(UUID userId, UUID outfitId) {
+        Optional<TryonRequest> completed = tryonRequestRepository
+                .findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
+                        userId, outfitId, TryonRequestStatus.COMPLETE);
+        if (completed.isEmpty() || completed.get().getCompletedAt() == null) {
+            return Optional.empty();
+        }
+
+        Optional<LocalDateTime> photoLastModifiedAt = photoService.getLastModifiedAt(userId, PhotoType.FRONT);
+        if (photoLastModifiedAt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return completed.get().getCompletedAt().isAfter(photoLastModifiedAt.get())
+                ? completed
+                : Optional.empty();
     }
 }

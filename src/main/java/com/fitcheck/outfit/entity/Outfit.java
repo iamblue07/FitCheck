@@ -30,12 +30,16 @@ public class Outfit extends AuditableEntity {
 
     private BigDecimal compatibilityScore;
 
+    @Column(nullable = false)
     private BigDecimal colorScore;
 
+    @Column(nullable = false)
     private BigDecimal layeringScore;
 
+    @Column(nullable = false)
     private BigDecimal structuredScore;
 
+    @Column(nullable = false)
     private BigDecimal embeddingScore;
 
     @Column(nullable = false, unique = true)

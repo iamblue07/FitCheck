@@ -1,68 +1,52 @@
 package com.fitcheck.identity.controller;
 
-import com.fitcheck.common.config.CommonBeansConfig;
-import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
-import com.fitcheck.common.security.config.JwtConfig;
-import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
-import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.config.SecurityConfig;
-import com.fitcheck.identity.service.AppUserDetailsService;
+import com.fitcheck.common.security.filter.AuthRateLimitFilter;
+import com.fitcheck.common.logging.filter.CorrelationIdFilter;
 import com.fitcheck.identity.service.AuthService;
+import com.fitcheck.support.WebSliceTestConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
-        ErrorResponseFactory.class, CommonBeansConfig.class})
+@Import(WebSliceTestConfig.class)
 @TestPropertySource(properties = {
-        "jwt.secret=" + AuthControllerSecurityTest.TEST_JWT_SECRET,
-        "jwt.access-expiration=900000",
-        "jwt.refresh-expiration=604800000"
+        WebSliceTestConfig.JWT_SECRET_PROPERTY,
+        WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY
 })
 class AuthControllerSecurityTest {
-
-    static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
-
-    @MockitoBean
     private AuthService authService;
 
-    // Required so SecurityConfig's AuthenticationManager bean has a UserDetailsService to build
-    // a DaoAuthenticationProvider around at context startup. Never invoked directly by either
-    // test below — neither one exercises the login path, only per-request JWT validation.
     @MockitoBean
-    private AppUserDetailsService appUserDetailsService;
+    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @Test
     void protectedEndpoint_missingAuthorizationHeader_returns401InErrorResponseShape() throws Exception {
@@ -76,28 +60,63 @@ class AuthControllerSecurityTest {
 
     @Test
     void protectedEndpoint_validToken_passesSecurityAndReaches404ForUnmappedRoute() throws Exception {
-        String validToken = generateTestAccessToken();
-
-        mockMvc.perform(get("/api/v1/anything").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken))
-                .andDo(print()).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/anything")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + WebSliceTestConfig.accessToken()))
+                .andExpect(status().isNotFound());
     }
 
-    private String generateTestAccessToken() {
-        SecretKey secretKey = new SecretKeySpec(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        JwtEncoder jwtEncoder = NimbusJwtEncoder.withSecretKey(secretKey).build();
+    @Test
+    void protectedEndpoint_isNotSubjectToTheAuthRateLimitFilter() throws Exception {
+        mockMvc.perform(get("/api/v1/anything")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + WebSliceTestConfig.accessToken()))
+                .andExpect(status().isNotFound());
 
-        Instant now = Instant.now();
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-                .subject(UUID.randomUUID().toString())
-                .issuedAt(now)
-                .expiresAt(now.plus(Duration.ofMinutes(15)))
-                .claim("email", "test@example.com")
-                .claim("role", "USER")
-                .issuer("https://fitcheck.local")
-                .audience(List.of("fitcheck-api"))
-                .build();
-        JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
+        verifyNoInteractions(inMemoryRateLimiter);
+    }
 
-        return jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).getTokenValue();
+    @Test
+    void login_ipBudgetExhausted_returns429ThroughTheRealChainBeforeReachingTheController() throws Exception {
+        when(inMemoryRateLimiter.tryConsume(
+                any(), eq(AuthRateLimitFilter.IP_OPERATION_KEY), anyInt(), any(Duration.class)))
+                .thenReturn(false);
+
+        String body = """
+                {"email": "valid@example.com", "password": "password123"}
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value(429))
+                .andExpect(jsonPath("$.path").value("/api/v1/auth/login"))
+                .andExpect(jsonPath("$.correlationId").exists())
+                .andExpect(header().exists(CorrelationIdFilter.HEADER_NAME));
+
+        verifyNoInteractions(authService);
+        verify(inMemoryRateLimiter, never()).tryConsume(
+                any(), eq(AuthRateLimitFilter.EMAIL_OPERATION_KEY), anyInt(), any(Duration.class));
+    }
+
+    @Test
+    void login_ipBudgetAvailableButEmailBudgetExhausted_returns429ThroughTheRealChain() throws Exception {
+        when(inMemoryRateLimiter.tryConsume(
+                any(), eq(AuthRateLimitFilter.IP_OPERATION_KEY), anyInt(), any(Duration.class)))
+                .thenReturn(true);
+        when(inMemoryRateLimiter.tryConsume(
+                eq("valid@example.com"), eq(AuthRateLimitFilter.EMAIL_OPERATION_KEY), anyInt(), any(Duration.class)))
+                .thenReturn(false);
+
+        String body = """
+                {"email": "Valid@Example.com", "password": "password123"}
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value(429));
+
+        verifyNoInteractions(authService);
     }
 }

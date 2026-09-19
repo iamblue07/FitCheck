@@ -1,39 +1,21 @@
 package com.fitcheck.identity.controller;
 
-import com.fitcheck.common.config.CommonBeansConfig;
-import com.fitcheck.common.exception.support.ErrorResponseFactory;
-import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
-import com.fitcheck.common.security.config.JwtConfig;
-import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
-import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.config.SecurityConfig;
 import com.fitcheck.identity.dto.StyleTagResponse;
 import com.fitcheck.identity.dto.UserProfileResponse;
 import com.fitcheck.identity.enums.Sex;
-import com.fitcheck.identity.service.AppUserDetailsService;
 import com.fitcheck.identity.service.ProfileService;
+import com.fitcheck.support.WebSliceTestConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -46,28 +28,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProfileController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
-        ErrorResponseFactory.class, CommonBeansConfig.class})
+@Import(WebSliceTestConfig.class)
 @TestPropertySource(properties = {
-        "jwt.secret=" + ProfileControllerSecurityTest.TEST_JWT_SECRET,
-        "jwt.access-expiration=900000",
-        "jwt.refresh-expiration=604800000"
+        WebSliceTestConfig.JWT_SECRET_PROPERTY,
+        WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY
 })
 class ProfileControllerSecurityTest {
-
-    static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
-
-    @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private ProfileService profileService;
-
-    @MockitoBean
-    private AppUserDetailsService appUserDetailsService;
 
     @Test
     void getProfile_validToken_returns200WithMappedBody() throws Exception {
@@ -78,10 +51,17 @@ class ProfileControllerSecurityTest {
         when(profileService.getProfile(any())).thenReturn(mockResponse);
 
         mockMvc.perform(get("/api/v1/users/me/profile")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateTestAccessToken()))
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + WebSliceTestConfig.accessToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currency").value("RON"))
                 .andExpect(jsonPath("$.styleTags[0].name").value("minimalist"));
+    }
+
+    @Test
+    void getProfile_missingAuthorizationHeader_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/users/me/profile"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test
@@ -95,29 +75,10 @@ class ProfileControllerSecurityTest {
                 """.formatted(tagId);
 
         mockMvc.perform(put("/api/v1/users/me/style-preferences")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateTestAccessToken())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + WebSliceTestConfig.accessToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("minimalist"));
-    }
-
-    private String generateTestAccessToken() {
-        SecretKey secretKey = new SecretKeySpec(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        JwtEncoder jwtEncoder = NimbusJwtEncoder.withSecretKey(secretKey).build();
-
-        Instant now = Instant.now();
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-                .subject(UUID.randomUUID().toString())
-                .issuedAt(now)
-                .expiresAt(now.plus(Duration.ofMinutes(15)))
-                .claim("email", "test@example.com")
-                .claim("role", "USER")
-                .issuer("https://fitcheck.local")
-                .audience(List.of("fitcheck-api"))
-                .build();
-        JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
-
-        return jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).getTokenValue();
     }
 }

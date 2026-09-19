@@ -1,41 +1,23 @@
 package com.fitcheck.outfit.controller;
 
-import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
-import com.fitcheck.common.security.config.JwtConfig;
-import com.fitcheck.common.config.CommonBeansConfig;
-import com.fitcheck.common.exception.support.ErrorResponseFactory;
-import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
-import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.config.SecurityConfig;
 import com.fitcheck.common.taxonomy.enums.GarmentRole;
-import com.fitcheck.identity.service.AppUserDetailsService;
 import com.fitcheck.outfit.dto.AlternativeCandidateResponse;
 import com.fitcheck.outfit.domain.CompatibilityScoreBreakdown;
 import com.fitcheck.outfit.domain.OutfitItemView;
 import com.fitcheck.outfit.dto.OutfitResponse;
 import com.fitcheck.outfit.service.GarmentSwapService;
+import com.fitcheck.support.WebSliceTestConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,28 +30,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(GarmentSwapController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
-        ErrorResponseFactory.class, CommonBeansConfig.class})
+@Import(WebSliceTestConfig.class)
 @TestPropertySource(properties = {
-        "jwt.secret=" + GarmentSwapControllerSecurityTest.TEST_JWT_SECRET,
-        "jwt.access-expiration=900000",
-        "jwt.refresh-expiration=604800000"
+        WebSliceTestConfig.JWT_SECRET_PROPERTY,
+        WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY
 })
 class GarmentSwapControllerSecurityTest {
-
-    static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
-
-    @MockitoBean
     private GarmentSwapService garmentSwapService;
-
-    @MockitoBean
-    private AppUserDetailsService appUserDetailsService;
 
     @Test
     void listAlternatives_missingAuthorizationHeader_returns401() throws Exception {
@@ -94,7 +67,7 @@ class GarmentSwapControllerSecurityTest {
         when(garmentSwapService.listAlternatives(eq(outfitId), eq(itemId), any())).thenReturn(mockResponse);
 
         mockMvc.perform(get("/api/v1/outfits/{outfitId}/items/{itemId}/alternatives", outfitId, itemId)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateTestAccessToken()))
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + WebSliceTestConfig.accessToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].productId").value(candidateId.toString()))
                 .andExpect(jsonPath("$[0].productDisplayName").value("Slim Fit Tee"))
@@ -136,7 +109,7 @@ class GarmentSwapControllerSecurityTest {
                 """.formatted(productId);
 
         mockMvc.perform(post("/api/v1/outfits/{outfitId}/items/{itemId}/swap", outfitId, itemId)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateTestAccessToken())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + WebSliceTestConfig.accessToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -145,24 +118,5 @@ class GarmentSwapControllerSecurityTest {
                 .andExpect(jsonPath("$.items[0].itemId").value(resultItemId.toString()))
                 .andExpect(jsonPath("$.items[0].productId").value(productId.toString()))
                 .andExpect(jsonPath("$.items[0].slot").value("TOP"));
-    }
-
-    private String generateTestAccessToken() {
-        SecretKey secretKey = new SecretKeySpec(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        JwtEncoder jwtEncoder = NimbusJwtEncoder.withSecretKey(secretKey).build();
-
-        Instant now = Instant.now();
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-                .subject(UUID.randomUUID().toString())
-                .issuedAt(now)
-                .expiresAt(now.plus(Duration.ofMinutes(15)))
-                .claim("email", "test@example.com")
-                .claim("role", "USER")
-                .issuer("https://fitcheck.local")
-                .audience(List.of("fitcheck-api"))
-                .build();
-        JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
-
-        return jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).getTokenValue();
     }
 }

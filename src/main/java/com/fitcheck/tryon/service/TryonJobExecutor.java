@@ -24,6 +24,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -43,20 +46,38 @@ public class TryonJobExecutor {
     private final StorageService storageService;
     private final TryonProperties properties;
     private final HttpClient httpClient;
+    private final Clock clock;
 
     public void run(UUID tryonRequestId) {
+        tryonPersistenceService.markRequestProcessing(tryonRequestId);
+
         TryonRequest tryonRequest = tryonRequestRepository.findById(tryonRequestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tryon request not found: " + tryonRequestId));
         List<TryonRequestItem> items = tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(tryonRequestId);
 
-        String currentImageUrl = resolveFrontPhotoUrl(tryonRequest.getUser().getId());
+        String frontPhotoStorageKey = photoService.getStorageKey(tryonRequest.getUser().getId(), PhotoType.FRONT);
+        Instant jobDeadline = clock.instant().plus(Duration.ofMillis(properties.jobTimeoutMs()));
+
+        String currentImageUrl = null;
 
         for (TryonRequestItem item : items) {
-            String modelImageUrl = currentImageUrl;
+            if (!clock.instant().isBefore(jobDeadline)) {
+                String message = "Try-on job exceeded its " + properties.jobTimeoutMs() + "ms budget";
+                log.warn("Tryon job {} abandoned: {}", tryonRequestId, message);
+                tryonPersistenceService.markItemFailed(item.getId());
+                tryonPersistenceService.markRequestFailed(tryonRequestId, message);
+                return;
+            }
+
+            String previousImageUrl = currentImageUrl;
+            Supplier<String> modelImageUrlSupplier = previousImageUrl == null
+                    ? () -> presignedFrontPhotoUrl(frontPhotoStorageKey)
+                    : () -> previousImageUrl;
             Product product = item.getProduct();
 
             try {
-                currentImageUrl = tryonStepExecutor.execute(submitterFor(modelImageUrl, product));
+                currentImageUrl = tryonStepExecutor.execute(
+                        submitterFor(modelImageUrlSupplier, product), jobDeadline);
             } catch (ExternalServiceException e) {
                 log.warn("Tryon step failed for request {} item {}: {}", tryonRequestId, item.getId(), e.getMessage());
                 tryonPersistenceService.markItemFailed(item.getId());
@@ -66,18 +87,22 @@ public class TryonJobExecutor {
             tryonPersistenceService.markItemComplete(item.getId());
         }
 
-        byte[] resultBytes = downloadBytes(currentImageUrl);
+        String resultImageUrl = currentImageUrl != null
+                ? currentImageUrl
+                : presignedFrontPhotoUrl(frontPhotoStorageKey);
+        byte[] resultBytes = downloadBytes(resultImageUrl);
         String storageKey = StorageKeys.tryonResultKey(tryonRequestId);
         storageService.store(storageKey, resultBytes, "image/" + properties.fashnOutputFormat());
         tryonPersistenceService.markRequestComplete(tryonRequestId, storageKey);
     }
 
-    private Supplier<String> submitterFor(String modelImageUrl, Product product) {
+    private Supplier<String> submitterFor(Supplier<String> modelImageUrlSupplier, Product product) {
         GarmentRole role = product.getGarmentRole();
         if (role == GarmentRole.FOOTWEAR || role == GarmentRole.ACCESSORY) {
-            return () -> fashnClient.submitTryonMax(modelImageUrl, product.getImageUrl());
+            return () -> fashnClient.submitTryonMax(modelImageUrlSupplier.get(), product.getImageUrl());
         }
-        return () -> fashnClient.submitTryonV16(modelImageUrl, product.getImageUrl(), resolveCategory(role));
+        return () -> fashnClient.submitTryonV16(
+                modelImageUrlSupplier.get(), product.getImageUrl(), resolveCategory(role));
     }
 
     private String resolveCategory(GarmentRole role) {
@@ -90,8 +115,7 @@ public class TryonJobExecutor {
         return "bottoms";
     }
 
-    private String resolveFrontPhotoUrl(UUID userId) {
-        String storageKey = photoService.getStorageKey(userId, PhotoType.FRONT);
+    private String presignedFrontPhotoUrl(String storageKey) {
         return storageService.generateDownloadUrl(storageKey, StorageService.DEFAULT_TTL).toString();
     }
 

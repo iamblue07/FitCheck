@@ -6,6 +6,8 @@ import com.fitcheck.common.exception.ResourceNotFoundException;
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.storage.service.StorageService;
 import com.fitcheck.identity.entity.User;
+import com.fitcheck.identity.enums.PhotoType;
+import com.fitcheck.identity.service.PhotoService;
 import com.fitcheck.identity.service.UserReferenceQueryService;
 import com.fitcheck.outfit.entity.Outfit;
 import com.fitcheck.outfit.service.OutfitItemQueryService;
@@ -24,8 +26,10 @@ import org.springframework.core.task.AsyncTaskExecutor;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
@@ -46,6 +50,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TryonRequestServiceTest {
 
+    private static final Set<TryonRequestStatus> IN_FLIGHT =
+            Set.of(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
+
     @Mock
     private OutfitItemQueryService outfitItemQueryService;
     @Mock
@@ -56,6 +63,8 @@ class TryonRequestServiceTest {
     private TryonRequestRepository tryonRequestRepository;
     @Mock
     private UserReferenceQueryService userReferenceQueryService;
+    @Mock
+    private PhotoService photoService;
     @Mock
     private StorageService storageService;
     @Mock
@@ -71,11 +80,11 @@ class TryonRequestServiceTest {
 
     @BeforeEach
     void setUp() {
-        properties = new TryonProperties(20, 5, 2000, 3000, 60000,
+        properties = new TryonProperties(20, 1, 2000, 3000, 180000, 900000,
                 "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
         service = new TryonRequestService(
                 outfitItemQueryService, inMemoryRateLimiter, tryonPersistenceService, tryonRequestRepository,
-                userReferenceQueryService, storageService, properties, tryonJobExecutor, tryonExecutor);
+                userReferenceQueryService, photoService, storageService, properties, tryonJobExecutor, tryonExecutor);
 
         userId = UUID.randomUUID();
         outfitId = UUID.randomUUID();
@@ -87,6 +96,8 @@ class TryonRequestServiceTest {
         when(tryonExecutor.submit(captor.capture())).thenReturn((Future) future);
         return future;
     }
+
+    // ---------- submit: guards before any work ----------
 
     @Test
     void submit_outfitHasNoValidProducts_propagatesExceptionBeforeConsumingRateLimitBudget() {
@@ -102,10 +113,117 @@ class TryonRequestServiceTest {
     }
 
     @Test
+    void submit_requestAlreadyInFlightForSameOutfit_returnsItWithoutConsumingRateLimitOrQueueingAnother() {
+        UUID inFlightId = UUID.randomUUID();
+        Product product = Product.builder().id(UUID.randomUUID()).build();
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
+        TryonRequest inFlight = TryonRequest.builder()
+                .id(inFlightId).status(TryonRequestStatus.PROCESSING).build();
+        when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(
+                userId, outfitId, IN_FLIGHT)).thenReturn(Optional.of(inFlight));
+
+        TryonStatusResponse response = service.submit(userId, outfitId);
+
+        assertThat(response.id()).isEqualTo(inFlightId);
+        assertThat(response.status()).isEqualTo(TryonRequestStatus.PROCESSING);
+        verifyNoInteractions(inMemoryRateLimiter);
+        verifyNoInteractions(tryonExecutor);
+        verify(tryonPersistenceService, never()).createPending(any(), any(), any());
+    }
+
+    // ---------- submit: reuse of a valid COMPLETE result ----------
+
+    @Test
+    void submit_completedResultNewerThanFrontPhoto_isReusedWithAFreshPresignedUrlAndNoRateLimitCost() {
+        UUID completedId = UUID.randomUUID();
+        Product product = Product.builder().id(UUID.randomUUID()).build();
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
+
+        User user = User.builder().id(userId).build();
+        String storageKey = "tryon-results/" + completedId + ".jpg";
+        TryonRequest completed = TryonRequest.builder()
+                .id(completedId).user(user).status(TryonRequestStatus.COMPLETE)
+                .resultImageStorageKey(storageKey)
+                .completedAt(LocalDateTime.of(2026, 9, 4, 12, 0))
+                .build();
+        when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
+                userId, outfitId, TryonRequestStatus.COMPLETE)).thenReturn(Optional.of(completed));
+        when(photoService.getLastModifiedAt(userId, PhotoType.FRONT))
+                .thenReturn(Optional.of(LocalDateTime.of(2026, 9, 4, 11, 0)));
+        when(tryonRequestRepository.findById(completedId)).thenReturn(Optional.of(completed));
+        when(storageService.generateDownloadUrl(storageKey, StorageService.DEFAULT_TTL))
+                .thenReturn(URI.create("https://r2.example.com/reused-presigned"));
+
+        TryonStatusResponse response = service.submit(userId, outfitId);
+
+        assertThat(response.id()).isEqualTo(completedId);
+        assertThat(response.status()).isEqualTo(TryonRequestStatus.COMPLETE);
+        assertThat(response.resultImageUrl()).isEqualTo("https://r2.example.com/reused-presigned");
+
+        verifyNoInteractions(inMemoryRateLimiter);
+        verifyNoInteractions(tryonExecutor);
+        verify(tryonPersistenceService, never()).createPending(any(), any(), any());
+    }
+
+    @Test
+    void submit_frontPhotoReplacedAfterTheCompletedResult_rendersFreshInsteadOfReusing() {
+        UUID completedId = UUID.randomUUID();
+        Product product = Product.builder().id(UUID.randomUUID()).build();
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
+
+        TryonRequest completed = TryonRequest.builder()
+                .id(completedId).status(TryonRequestStatus.COMPLETE)
+                .resultImageStorageKey("tryon-results/" + completedId + ".jpg")
+                .completedAt(LocalDateTime.of(2026, 9, 4, 11, 0))
+                .build();
+        when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
+                userId, outfitId, TryonRequestStatus.COMPLETE)).thenReturn(Optional.of(completed));
+        when(photoService.getLastModifiedAt(userId, PhotoType.FRONT))
+                .thenReturn(Optional.of(LocalDateTime.of(2026, 9, 4, 12, 0)));
+        when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
+        UUID newRequestId = stubHappyPathAfterRateLimit(product);
+
+        TryonStatusResponse response = service.submit(userId, outfitId);
+
+        assertThat(response.id()).isEqualTo(newRequestId);
+        assertThat(response.status()).isEqualTo(TryonRequestStatus.PENDING);
+        verify(inMemoryRateLimiter).tryConsume(userId.toString(), "tryon-submit", 20, Duration.ofHours(1));
+        verify(tryonExecutor).submit(any(Runnable.class));
+        verify(storageService, never()).generateDownloadUrl(any(), any());
+    }
+
+    @Test
+    void submit_noFrontPhotoRowExists_rendersFreshRatherThanReusingAPossiblyStaleResult() {
+        UUID completedId = UUID.randomUUID();
+        Product product = Product.builder().id(UUID.randomUUID()).build();
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
+
+        TryonRequest completed = TryonRequest.builder()
+                .id(completedId).status(TryonRequestStatus.COMPLETE)
+                .resultImageStorageKey("tryon-results/" + completedId + ".jpg")
+                .completedAt(LocalDateTime.of(2026, 9, 4, 12, 0))
+                .build();
+        when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
+                userId, outfitId, TryonRequestStatus.COMPLETE)).thenReturn(Optional.of(completed));
+        when(photoService.getLastModifiedAt(userId, PhotoType.FRONT)).thenReturn(Optional.empty());
+        when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
+        UUID newRequestId = stubHappyPathAfterRateLimit(product);
+
+        TryonStatusResponse response = service.submit(userId, outfitId);
+
+        assertThat(response.id()).isEqualTo(newRequestId);
+        verify(tryonExecutor).submit(any(Runnable.class));
+        verify(storageService, never()).generateDownloadUrl(any(), any());
+    }
+
+    // ---------- submit: fresh render path ----------
+
+    @Test
     void submit_rateLimitExceeded_throwsRateLimitExceededExceptionAndNeverCreatesRequest() {
         Product product = Product.builder().id(UUID.randomUUID()).build();
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
-        when(inMemoryRateLimiter.tryConsume(userId.toString(), "tryon-submit", 20, Duration.ofHours(1))).thenReturn(false);
+        when(inMemoryRateLimiter.tryConsume(userId.toString(), "tryon-submit", 20, Duration.ofHours(1)))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> service.submit(userId, outfitId))
                 .isInstanceOf(RateLimitExceededException.class);
@@ -128,17 +246,10 @@ class TryonRequestServiceTest {
 
     @Test
     void submit_success_returnsPendingStatusResponseWithNullResultAndErrorFields() {
-        UUID requestId = UUID.randomUUID();
         Product product = Product.builder().id(UUID.randomUUID()).build();
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
         when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
-        User user = User.builder().id(userId).build();
-        Outfit outfit = Outfit.builder().id(outfitId).build();
-        when(userReferenceQueryService.getReference(userId)).thenReturn(user);
-        when(outfitItemQueryService.getReference(outfitId)).thenReturn(outfit);
-        TryonRequest createdRequest = TryonRequest.builder()
-                .id(requestId).user(user).outfit(outfit).status(TryonRequestStatus.PENDING).build();
-        when(tryonPersistenceService.createPending(user, outfit, List.of(product))).thenReturn(createdRequest);
+        UUID requestId = stubHappyPathAfterRateLimit(product);
 
         TryonStatusResponse response = service.submit(userId, outfitId);
 
@@ -151,9 +262,9 @@ class TryonRequestServiceTest {
     @Test
     void submit_success_submitsBackgroundJobToTryonExecutor() {
         Product product = Product.builder().id(UUID.randomUUID()).build();
-        stubHappyPathAfterRateLimit(product);
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
         when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
+        stubHappyPathAfterRateLimit(product);
 
         service.submit(userId, outfitId);
 
@@ -162,17 +273,10 @@ class TryonRequestServiceTest {
 
     @Test
     void submit_backgroundJobRunsSuccessfully_neverCallsMarkRequestFailed() {
-        UUID requestId = UUID.randomUUID();
         Product product = Product.builder().id(UUID.randomUUID()).build();
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
         when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
-        User user = User.builder().id(userId).build();
-        Outfit outfit = Outfit.builder().id(outfitId).build();
-        when(userReferenceQueryService.getReference(userId)).thenReturn(user);
-        when(outfitItemQueryService.getReference(outfitId)).thenReturn(outfit);
-        TryonRequest createdRequest = TryonRequest.builder()
-                .id(requestId).user(user).outfit(outfit).status(TryonRequestStatus.PENDING).build();
-        when(tryonPersistenceService.createPending(user, outfit, List.of(product))).thenReturn(createdRequest);
+        UUID requestId = stubHappyPathAfterRateLimit(product);
         ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
         stubExecutorSubmit(taskCaptor);
 
@@ -185,27 +289,21 @@ class TryonRequestServiceTest {
 
     @Test
     void submit_backgroundJobThrowsRuntimeException_caughtAndMarksRequestFailedRatherThanPropagating() {
-        UUID requestId = UUID.randomUUID();
         Product product = Product.builder().id(UUID.randomUUID()).build();
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
         when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
-        User user = User.builder().id(userId).build();
-        Outfit outfit = Outfit.builder().id(outfitId).build();
-        when(userReferenceQueryService.getReference(userId)).thenReturn(user);
-        when(outfitItemQueryService.getReference(outfitId)).thenReturn(outfit);
-        TryonRequest createdRequest = TryonRequest.builder()
-                .id(requestId).user(user).outfit(outfit).status(TryonRequestStatus.PENDING).build();
-        when(tryonPersistenceService.createPending(user, outfit, List.of(product))).thenReturn(createdRequest);
+        UUID requestId = stubHappyPathAfterRateLimit(product);
         ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
         stubExecutorSubmit(taskCaptor);
-        doThrow(new IllegalStateException("unexpected failure"))
-                .when(tryonJobExecutor).run(requestId);
+        doThrow(new IllegalStateException("unexpected failure")).when(tryonJobExecutor).run(requestId);
 
         service.submit(userId, outfitId);
 
         assertThatCode(() -> taskCaptor.getValue().run()).doesNotThrowAnyException();
         verify(tryonPersistenceService).markRequestFailed(requestId, "unexpected failure");
     }
+
+    // ---------- getStatus ----------
 
     @Test
     void getStatus_requestNotFound_throwsResourceNotFoundException() {
@@ -230,15 +328,16 @@ class TryonRequestServiceTest {
     }
 
     @Test
-    void getStatus_pendingStatus_returnsNullResultImageUrlAndNullErrorMessage() {
+    void getStatus_processingStatus_returnsNullResultImageUrlAndNullErrorMessage() {
         UUID requestId = UUID.randomUUID();
         User user = User.builder().id(userId).build();
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = TryonRequest.builder()
+                .id(requestId).user(user).status(TryonRequestStatus.PROCESSING).build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
 
         TryonStatusResponse response = service.getStatus(userId, requestId);
 
-        assertThat(response.status()).isEqualTo(TryonRequestStatus.PENDING);
+        assertThat(response.status()).isEqualTo(TryonRequestStatus.PROCESSING);
         assertThat(response.resultImageUrl()).isNull();
         assertThat(response.errorMessage()).isNull();
         verify(storageService, never()).generateDownloadUrl(any(), any());
@@ -248,13 +347,13 @@ class TryonRequestServiceTest {
     void getStatus_completeStatus_returnsFreshlyGeneratedPresignedUrl() {
         UUID requestId = UUID.randomUUID();
         User user = User.builder().id(userId).build();
+        String storageKey = "tryon-results/" + requestId + ".jpg";
         TryonRequest request = TryonRequest.builder()
                 .id(requestId).user(user).status(TryonRequestStatus.COMPLETE)
-                .resultImageStorageKey("tryon-results/" + requestId + ".jpg").build();
+                .resultImageStorageKey(storageKey).build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
         URI presignedUrl = URI.create("https://r2.example.com/tryon-result-presigned");
-        when(storageService.generateDownloadUrl("tryon-results/" + requestId + ".jpg", StorageService.DEFAULT_TTL))
-                .thenReturn(presignedUrl);
+        when(storageService.generateDownloadUrl(storageKey, StorageService.DEFAULT_TTL)).thenReturn(presignedUrl);
 
         TryonStatusResponse response = service.getStatus(userId, requestId);
 
@@ -265,11 +364,12 @@ class TryonRequestServiceTest {
     void getStatus_completeStatus_generatesNewUrlOnEveryCallRatherThanCaching() {
         UUID requestId = UUID.randomUUID();
         User user = User.builder().id(userId).build();
+        String storageKey = "tryon-results/" + requestId + ".jpg";
         TryonRequest request = TryonRequest.builder()
                 .id(requestId).user(user).status(TryonRequestStatus.COMPLETE)
-                .resultImageStorageKey("tryon-results/" + requestId + ".jpg").build();
+                .resultImageStorageKey(storageKey).build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
-        when(storageService.generateDownloadUrl(eq("tryon-results/" + requestId + ".jpg"), eq(StorageService.DEFAULT_TTL)))
+        when(storageService.generateDownloadUrl(eq(storageKey), eq(StorageService.DEFAULT_TTL)))
                 .thenReturn(URI.create("https://r2.example.com/first"))
                 .thenReturn(URI.create("https://r2.example.com/second"));
 
@@ -277,8 +377,7 @@ class TryonRequestServiceTest {
         TryonStatusResponse second = service.getStatus(userId, requestId);
 
         assertThat(first.resultImageUrl()).isNotEqualTo(second.resultImageUrl());
-        verify(storageService, times(2))
-                .generateDownloadUrl("tryon-results/" + requestId + ".jpg", StorageService.DEFAULT_TTL);
+        verify(storageService, times(2)).generateDownloadUrl(storageKey, StorageService.DEFAULT_TTL);
     }
 
     @Test
@@ -287,24 +386,26 @@ class TryonRequestServiceTest {
         User user = User.builder().id(userId).build();
         TryonRequest request = TryonRequest.builder()
                 .id(requestId).user(user).status(TryonRequestStatus.FAILED)
-                .errorMessage("FASHN try-on step exhausted all retries: bad image").build();
+                .errorMessage("FASHN try-on step failed permanently: bad image").build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
 
         TryonStatusResponse response = service.getStatus(userId, requestId);
 
         assertThat(response.status()).isEqualTo(TryonRequestStatus.FAILED);
-        assertThat(response.errorMessage()).isEqualTo("FASHN try-on step exhausted all retries: bad image");
+        assertThat(response.errorMessage()).isEqualTo("FASHN try-on step failed permanently: bad image");
         assertThat(response.resultImageUrl()).isNull();
         verify(storageService, never()).generateDownloadUrl(any(), any());
     }
 
-    private void stubHappyPathAfterRateLimit(Product product) {
+    private UUID stubHappyPathAfterRateLimit(Product product) {
+        UUID requestId = UUID.randomUUID();
         User user = User.builder().id(userId).build();
         Outfit outfit = Outfit.builder().id(outfitId).build();
         when(userReferenceQueryService.getReference(userId)).thenReturn(user);
         when(outfitItemQueryService.getReference(outfitId)).thenReturn(outfit);
         TryonRequest createdRequest = TryonRequest.builder()
-                .id(UUID.randomUUID()).user(user).outfit(outfit).status(TryonRequestStatus.PENDING).build();
+                .id(requestId).user(user).outfit(outfit).status(TryonRequestStatus.PENDING).build();
         when(tryonPersistenceService.createPending(user, outfit, List.of(product))).thenReturn(createdRequest);
+        return requestId;
     }
 }

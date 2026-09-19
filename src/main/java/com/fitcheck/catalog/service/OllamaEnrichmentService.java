@@ -3,6 +3,7 @@ package com.fitcheck.catalog.service;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.domain.ProductEnrichmentResult;
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.logging.enums.ExternalCallOutcome;
 import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.common.taxonomy.entity.StyleTag;
 import com.fitcheck.common.taxonomy.repository.StyleTagRepository;
@@ -30,7 +31,9 @@ import java.util.stream.Collectors;
 public class OllamaEnrichmentService implements EnrichmentService {
 
     private static final String PROVIDER = "ollama-local";
+    private static final String PROVIDER_DATASET_CDN = "dataset-cdn";
     private static final String OPERATION_ENRICH = "enrich-product";
+    private static final String OPERATION_DOWNLOAD_IMAGE = "download-product-image";
 
     private final HttpClient httpClient;
 
@@ -56,12 +59,13 @@ public class OllamaEnrichmentService implements EnrichmentService {
                     .call()
                     .entity(ProductEnrichmentResult.class);
         } catch (RuntimeException e) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_ENRICH, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_ENRICH, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException(
                     "Ollama enrichment call failed for product " + product.getId() + ": " + e.getMessage());
         }
 
-        externalCallLogger.logCall(PROVIDER, OPERATION_ENRICH, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, OPERATION_ENRICH, elapsedMs(startedAt), ExternalCallOutcome.SUCCESS);
         return result;
     }
 
@@ -86,19 +90,29 @@ public class OllamaEnrichmentService implements EnrichmentService {
     }
 
     private byte[] downloadImage(String imageUrl) {
+        long startedAt = System.nanoTime();
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(imageUrl)).GET().build();
             HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() != 200) {
+                externalCallLogger.logCall(PROVIDER_DATASET_CDN, OPERATION_DOWNLOAD_IMAGE, elapsedMs(startedAt),
+                        ExternalCallOutcome.PERMANENT_FAILURE);
                 throw new ExternalServiceException(
                         "Failed to download product image, HTTP " + response.statusCode() + ": " + imageUrl);
             }
+
+            externalCallLogger.logCall(PROVIDER_DATASET_CDN, OPERATION_DOWNLOAD_IMAGE, elapsedMs(startedAt),
+                    ExternalCallOutcome.SUCCESS);
             return response.body();
         } catch (IOException e) {
+            externalCallLogger.logCall(PROVIDER_DATASET_CDN, OPERATION_DOWNLOAD_IMAGE, elapsedMs(startedAt),
+                    ExternalCallOutcome.RETRYABLE_FAILURE);
             throw new ExternalServiceException("Failed to download product image " + imageUrl + ": " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            externalCallLogger.logCall(PROVIDER_DATASET_CDN, OPERATION_DOWNLOAD_IMAGE, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw new ExternalServiceException("Interrupted while downloading product image: " + imageUrl);
         }
     }

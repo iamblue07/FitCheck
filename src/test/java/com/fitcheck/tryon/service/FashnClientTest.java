@@ -15,6 +15,7 @@ import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -28,16 +29,16 @@ class FashnClientTest {
     private MockRestServiceServer mockServer;
     private FashnClient client;
     private TryonProperties properties;
-
-    private final ExternalCallLogger externalCallLogger = new ExternalCallLogger();
+    private ExternalCallLogger externalCallLogger;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         mockServer = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
+        externalCallLogger = mock(ExternalCallLogger.class);
         properties = new TryonProperties(
-                20, 5, 2000, 3000, 60000,
+                20, 5, 2000L, 3000L, 60000L, 900000L,
                 "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
         client = new FashnClient(restClient, properties, externalCallLogger);
     }
@@ -67,7 +68,7 @@ class FashnClientTest {
         MockRestServiceServer customServer = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
         TryonProperties customProperties = new TryonProperties(
-                20, 5, 2000, 3000, 60000,
+                20, 5, 2000L, 3000L, 60000L, 900000L,
                 "tryon-v1.7-preview", "performance", "tryon-max", "1k", "fast", "png");
         FashnClient customClient = new FashnClient(restClient, customProperties, externalCallLogger);
 
@@ -109,9 +110,10 @@ class FashnClientTest {
         MockRestServiceServer customServer = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
         TryonProperties customProperties = new TryonProperties(
-                20, 5, 2000, 3000, 60000,
+                20, 5, 2000L, 3000L, 60000L, 900000L,
                 "tryon-v1.6", "balanced", "tryon-max", "4k", "quality", "jpeg");
         FashnClient customClient = new FashnClient(restClient, customProperties, externalCallLogger);
+
         String expectedRequest = """
                 {"model_name":"tryon-max","inputs":{"model_image":"m","product_image":"p","resolution":"4k","generation_mode":"quality","output_format":"jpeg"}}
                 """;

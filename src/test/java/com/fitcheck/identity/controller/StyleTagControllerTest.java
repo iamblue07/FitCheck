@@ -1,14 +1,14 @@
 package com.fitcheck.identity.controller;
 
-import com.fitcheck.common.config.CommonBeansConfig;
-import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import com.fitcheck.identity.dto.StyleTagResponse;
 import com.fitcheck.identity.service.StyleTagService;
+import com.fitcheck.support.WebSliceTestConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -22,7 +22,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(StyleTagController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import({ErrorResponseFactory.class, CommonBeansConfig.class})
+@Import(WebSliceTestConfig.class)
+@TestPropertySource(properties = {
+        WebSliceTestConfig.JWT_SECRET_PROPERTY,
+        WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY
+})
 class StyleTagControllerTest {
 
     @Autowired

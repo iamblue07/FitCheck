@@ -121,6 +121,32 @@ class TryonPersistenceServiceTest {
     }
 
     @Test
+    void markRequestProcessing_existingRequest_movesPendingToProcessingWithoutSettingCompletedAt() {
+        UUID requestId = UUID.randomUUID();
+        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PENDING).build();
+        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+
+        service.markRequestProcessing(requestId);
+
+        assertThat(request.getStatus()).isEqualTo(TryonRequestStatus.PROCESSING);
+        assertThat(request.getCompletedAt()).isNull();
+        assertThat(request.getErrorMessage()).isNull();
+        verify(tryonRequestRepository).save(request);
+    }
+
+    @Test
+    void markRequestProcessing_requestNotFound_throwsResourceNotFoundExceptionAndNeverSaves() {
+        UUID requestId = UUID.randomUUID();
+        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.markRequestProcessing(requestId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining(requestId.toString());
+
+        verify(tryonRequestRepository, never()).save(any());
+    }
+
+    @Test
     void markItemComplete_existingItem_setsStatusAndSaves() {
         UUID itemId = UUID.randomUUID();
         TryonRequestItem item = TryonRequestItem.builder().id(itemId).status(TryonRequestItemStatus.PENDING).build();
@@ -170,7 +196,7 @@ class TryonPersistenceServiceTest {
     @Test
     void markRequestComplete_existingRequest_setsStatusStorageKeyAndCompletedAtFromClock() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
 
         service.markRequestComplete(requestId, "tryon-results/abc.jpg");
@@ -195,7 +221,7 @@ class TryonPersistenceServiceTest {
     @Test
     void markRequestFailed_existingRequest_setsStatusErrorMessageAndCompletedAt() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
         when(tryonRequestItemRepository.findByTryonRequestIdAndStatus(requestId, TryonRequestItemStatus.PENDING))
                 .thenReturn(List.of());
@@ -211,7 +237,7 @@ class TryonPersistenceServiceTest {
     @Test
     void markRequestFailed_bulkTransitionsEveryPendingItemToFailed() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
         TryonRequestItem pendingItem1 = TryonRequestItem.builder()
                 .id(UUID.randomUUID()).status(TryonRequestItemStatus.PENDING).build();
         TryonRequestItem pendingItem2 = TryonRequestItem.builder()
@@ -230,7 +256,7 @@ class TryonPersistenceServiceTest {
     @Test
     void markRequestFailed_noPendingItemsLeft_savesEmptyListWithoutException() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
         when(tryonRequestItemRepository.findByTryonRequestIdAndStatus(requestId, TryonRequestItemStatus.PENDING))
                 .thenReturn(List.of());

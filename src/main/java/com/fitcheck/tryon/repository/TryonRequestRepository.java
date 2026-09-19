@@ -12,4 +12,7 @@ public interface TryonRequestRepository extends JpaRepository<TryonRequest, UUID
 
     Optional<TryonRequest> findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(
             UUID userId, UUID outfitId, Collection<TryonRequestStatus> statuses);
+
+    Optional<TryonRequest> findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
+            UUID userId, UUID outfitId, TryonRequestStatus status);
 }

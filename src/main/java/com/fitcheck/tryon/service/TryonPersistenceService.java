@@ -52,6 +52,14 @@ public class TryonPersistenceService {
     }
 
     @Transactional
+    public void markRequestProcessing(UUID requestId) {
+        TryonRequest tryonRequest = tryonRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tryon request not found: " + requestId));
+        tryonRequest.setStatus(TryonRequestStatus.PROCESSING);
+        tryonRequestRepository.save(tryonRequest);
+    }
+
+    @Transactional
     public void markItemComplete(UUID itemId) {
         TryonRequestItem item = tryonRequestItemRepository.findById(itemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tryon request item not found: " + itemId));

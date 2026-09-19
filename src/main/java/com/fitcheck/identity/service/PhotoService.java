@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -66,6 +67,11 @@ public class PhotoService {
                 .map(UserBodyPhoto::getStorageKey)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No " + photoType.name().toLowerCase() + " body photo found for user " + userId));
+    }
+
+    public Optional<LocalDateTime> getLastModifiedAt(UUID userId, PhotoType photoType) {
+        return userBodyPhotoRepository.findByUserIdAndPhotoType(userId, photoType)
+                .map(photo -> photo.getUpdatedAt() != null ? photo.getUpdatedAt() : photo.getCreatedAt());
     }
 
     private UserBodyPhoto newPhoto(UUID userId, PhotoType photoType) {

@@ -20,14 +20,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,7 +43,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -46,6 +55,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TryonJobExecutorTest {
+
+    private static final Instant FIXED_INSTANT = Instant.parse("2026-09-04T12:00:00Z");
+    private static final long JOB_TIMEOUT_MS = 900000L;
 
     @Mock
     private TryonRequestRepository tryonRequestRepository;
@@ -73,11 +85,8 @@ class TryonJobExecutorTest {
 
     @BeforeEach
     void setUp() {
-        properties = new TryonProperties(20, 5, 2000, 3000, 60000,
-                "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
-        jobExecutor = new TryonJobExecutor(
-                tryonRequestRepository, tryonRequestItemRepository, tryonStepExecutor, fashnClient,
-                tryonPersistenceService, photoService, storageService, properties, httpClient);
+        properties = propertiesWith("jpeg", JOB_TIMEOUT_MS);
+        jobExecutor = jobExecutorWith(properties, Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC));
 
         requestId = UUID.randomUUID();
         userId = UUID.randomUUID();
@@ -96,8 +105,25 @@ class TryonJobExecutorTest {
     }
 
     @Test
+    void run_marksRequestProcessingBeforeReadingTheRequestRow() throws Exception {
+        TryonRequest request = pendingRequest();
+        stubFrontPhotoResolution(request);
+        TryonRequestItem item = itemFor(product(GarmentRole.TOP));
+        when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        stubSuccessfulDownload();
+
+        jobExecutor.run(requestId);
+
+        InOrder ordered = inOrder(tryonPersistenceService, tryonRequestRepository, tryonStepExecutor);
+        ordered.verify(tryonPersistenceService).markRequestProcessing(requestId);
+        ordered.verify(tryonRequestRepository).findById(requestId);
+        ordered.verify(tryonStepExecutor).execute(any(), any());
+    }
+
+    @Test
     void run_userHasNoFrontPhoto_propagatesResourceNotFoundException() {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of());
         when(photoService.getStorageKey(userId, PhotoType.FRONT))
@@ -106,18 +132,19 @@ class TryonJobExecutorTest {
         assertThatThrownBy(() -> jobExecutor.run(requestId))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(tryonStepExecutor, never()).execute(any());
+        verify(tryonStepExecutor, never()).execute(any(), any());
     }
 
     @Test
     void run_emptyItemsList_downloadsAndStoresFrontPhotoDirectlyAsResult() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         String frontPhotoUrl = stubFrontPhotoResolution(request);
+        when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of());
         stubSuccessfulDownload();
 
         jobExecutor.run(requestId);
 
-        verify(tryonStepExecutor, never()).execute(any());
+        verify(tryonStepExecutor, never()).execute(any(), any());
         verifyDownloadedFrom(frontPhotoUrl);
         verify(storageService).store(eq(StorageKeys.tryonResultKey(requestId)), any(byte[].class), eq("image/jpeg"));
         verify(tryonPersistenceService).markRequestComplete(requestId, StorageKeys.tryonResultKey(requestId));
@@ -125,11 +152,11 @@ class TryonJobExecutorTest {
 
     @Test
     void run_singleTopItem_fullChainSuccess_marksItemAndRequestComplete() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
         stubSuccessfulDownload();
 
         jobExecutor.run(requestId);
@@ -171,8 +198,29 @@ class TryonJobExecutorTest {
     }
 
     @Test
+    void run_firstItemSubmitter_reresolvesThePresignedFrontPhotoUrlOnEveryInvocation() throws Exception {
+        TryonRequest request = pendingRequest();
+        String frontPhotoUrl = stubFrontPhotoResolution(request);
+        Product topProduct = product(GarmentRole.TOP);
+        TryonRequestItem item = itemFor(topProduct);
+        when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        stubSuccessfulDownload();
+
+        jobExecutor.run(requestId);
+
+        Supplier<String> submitter = captureSubmitters().get(0);
+        submitter.get();
+        submitter.get();
+
+        verify(storageService, times(2))
+                .generateDownloadUrl(frontPhotoStorageKey(), StorageService.DEFAULT_TTL);
+        verify(fashnClient, times(2)).submitTryonV16(frontPhotoUrl, topProduct.getImageUrl(), "tops");
+    }
+
+    @Test
     void run_multipleItems_chainPropagatesPreviousOutputAsNextModelImage() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         String frontPhotoUrl = stubFrontPhotoResolution(request);
         Product topProduct = product(GarmentRole.TOP);
         Product bottomProduct = product(GarmentRole.BOTTOM);
@@ -180,17 +228,15 @@ class TryonJobExecutorTest {
         TryonRequestItem item2 = itemFor(bottomProduct);
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId))
                 .thenReturn(List.of(item1, item2));
-        when(tryonStepExecutor.execute(any()))
+        when(tryonStepExecutor.execute(any(), any()))
                 .thenReturn("https://cdn.fashn.ai/step1.jpg")
                 .thenReturn("https://cdn.fashn.ai/step2.jpg");
         stubSuccessfulDownload();
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Supplier<String>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
         jobExecutor.run(requestId);
 
-        verify(tryonStepExecutor, times(2)).execute(supplierCaptor.capture());
-        List<Supplier<String>> submitters = supplierCaptor.getAllValues();
+        List<Supplier<String>> submitters = captureSubmitters();
+        assertThat(submitters).hasSize(2);
 
         submitters.get(0).get();
         verify(fashnClient).submitTryonV16(frontPhotoUrl, topProduct.getImageUrl(), "tops");
@@ -201,37 +247,98 @@ class TryonJobExecutorTest {
 
     @Test
     void run_multipleItemsAllSucceed_marksEachItemCompleteInSequenceOrder() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item1 = itemFor(product(GarmentRole.TOP));
         TryonRequestItem item2 = itemFor(product(GarmentRole.BOTTOM));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId))
                 .thenReturn(List.of(item1, item2));
-        when(tryonStepExecutor.execute(any()))
+        when(tryonStepExecutor.execute(any(), any()))
                 .thenReturn("https://cdn.fashn.ai/step1.jpg")
                 .thenReturn("https://cdn.fashn.ai/step2.jpg");
         stubSuccessfulDownload();
 
         jobExecutor.run(requestId);
 
-        verify(tryonPersistenceService).markItemComplete(item1.getId());
-        verify(tryonPersistenceService).markItemComplete(item2.getId());
+        InOrder ordered = inOrder(tryonPersistenceService);
+        ordered.verify(tryonPersistenceService).markItemComplete(item1.getId());
+        ordered.verify(tryonPersistenceService).markItemComplete(item2.getId());
     }
 
     @Test
-    void run_midChainStepFails_shortCircuitsRemainingItemsAndNeverDownloadsOrStores() {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+    void run_everyStepReceivesTheSameJobDeadlineDerivedFromClockAndJobTimeout() throws Exception {
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item1 = itemFor(product(GarmentRole.TOP));
         TryonRequestItem item2 = itemFor(product(GarmentRole.BOTTOM));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId))
                 .thenReturn(List.of(item1, item2));
-        when(tryonStepExecutor.execute(any()))
-                .thenThrow(new ExternalServiceException("FASHN try-on step exhausted all retries: bad image"));
+        when(tryonStepExecutor.execute(any(), any()))
+                .thenReturn("https://cdn.fashn.ai/step1.jpg")
+                .thenReturn("https://cdn.fashn.ai/step2.jpg");
+        stubSuccessfulDownload();
 
         jobExecutor.run(requestId);
 
-        verify(tryonStepExecutor, times(1)).execute(any());
+        ArgumentCaptor<Instant> deadlineCaptor = ArgumentCaptor.forClass(Instant.class);
+        verify(tryonStepExecutor, times(2)).execute(any(), deadlineCaptor.capture());
+
+        Instant expectedDeadline = FIXED_INSTANT.plus(Duration.ofMillis(JOB_TIMEOUT_MS));
+        assertThat(deadlineCaptor.getAllValues()).containsExactly(expectedDeadline, expectedDeadline);
+    }
+
+    @Test
+    void run_jobBudgetExhaustedBeforeFirstItem_failsWithBudgetMessageAndNeverCallsTheStepExecutor() {
+        TryonJobExecutor budgetExecutor = jobExecutorWith(
+                propertiesWith("jpeg", 1L), new AdvancingClock(FIXED_INSTANT, Duration.ofSeconds(10)));
+        TryonRequest request = pendingRequest();
+        stubFrontPhotoResolution(request);
+        TryonRequestItem item = itemFor(product(GarmentRole.TOP));
+        when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
+
+        budgetExecutor.run(requestId);
+
+        verify(tryonStepExecutor, never()).execute(any(), any());
+        verify(tryonPersistenceService).markItemFailed(item.getId());
+        verify(tryonPersistenceService).markRequestFailed(eq(requestId), contains("budget"));
+        verify(storageService, never()).store(any(), any(), any());
+    }
+
+    @Test
+    void run_jobBudgetExhaustedBetweenItems_stopsBeforeTheSecondItem() throws Exception {
+        TryonJobExecutor budgetExecutor = jobExecutorWith(
+                propertiesWith("jpeg", 15000L), new AdvancingClock(FIXED_INSTANT, Duration.ofSeconds(10)));
+        TryonRequest request = pendingRequest();
+        stubFrontPhotoResolution(request);
+        TryonRequestItem item1 = itemFor(product(GarmentRole.TOP));
+        TryonRequestItem item2 = itemFor(product(GarmentRole.BOTTOM));
+        when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId))
+                .thenReturn(List.of(item1, item2));
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+
+        budgetExecutor.run(requestId);
+
+        verify(tryonStepExecutor, times(1)).execute(any(), any());
+        verify(tryonPersistenceService).markItemComplete(item1.getId());
+        verify(tryonPersistenceService).markItemFailed(item2.getId());
+        verify(tryonPersistenceService).markRequestFailed(eq(requestId), contains("budget"));
+        verify(tryonPersistenceService, never()).markRequestComplete(any(), any());
+    }
+
+    @Test
+    void run_midChainStepFails_shortCircuitsRemainingItemsAndNeverDownloadsOrStores() {
+        TryonRequest request = pendingRequest();
+        stubFrontPhotoResolution(request);
+        TryonRequestItem item1 = itemFor(product(GarmentRole.TOP));
+        TryonRequestItem item2 = itemFor(product(GarmentRole.BOTTOM));
+        when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId))
+                .thenReturn(List.of(item1, item2));
+        when(tryonStepExecutor.execute(any(), any()))
+                .thenThrow(new ExternalServiceException("FASHN try-on step failed permanently: bad image"));
+
+        jobExecutor.run(requestId);
+
+        verify(tryonStepExecutor, times(1)).execute(any(), any());
         verify(tryonPersistenceService).markItemFailed(item1.getId());
         verify(tryonPersistenceService, never()).markItemComplete(any());
         verify(tryonPersistenceService, never()).markItemFailed(item2.getId());
@@ -240,27 +347,28 @@ class TryonJobExecutorTest {
 
     @Test
     void run_stepFailure_marksFailedItemThenRequestFailedWithSameErrorMessage() {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any()))
-                .thenThrow(new ExternalServiceException("FASHN try-on step exhausted all retries: bad image"));
+        when(tryonStepExecutor.execute(any(), any()))
+                .thenThrow(new ExternalServiceException("FASHN try-on step failed permanently: bad image"));
 
         jobExecutor.run(requestId);
 
-        verify(tryonPersistenceService).markItemFailed(item.getId());
-        verify(tryonPersistenceService).markRequestFailed(
-                requestId, "FASHN try-on step exhausted all retries: bad image");
+        InOrder ordered = inOrder(tryonPersistenceService);
+        ordered.verify(tryonPersistenceService).markItemFailed(item.getId());
+        ordered.verify(tryonPersistenceService).markRequestFailed(
+                requestId, "FASHN try-on step failed permanently: bad image");
     }
 
     @Test
     void run_downloadResultNon200Status_throwsExternalServiceException() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
         @SuppressWarnings("unchecked")
         HttpResponse<byte[]> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(404);
@@ -275,11 +383,11 @@ class TryonJobExecutorTest {
 
     @Test
     void run_downloadResultIOException_throwsExternalServiceExceptionWrappingCause() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
         when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenThrow(new IOException("connection reset"));
 
@@ -290,11 +398,11 @@ class TryonJobExecutorTest {
 
     @Test
     void run_downloadResultInterruptedException_throwsExternalServiceExceptionAndRestoresInterruptFlag() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
         when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenThrow(new InterruptedException());
 
@@ -306,12 +414,9 @@ class TryonJobExecutorTest {
 
     @Test
     void run_contentTypeDerivedFromConfiguredOutputFormat_notHardcodedJpeg() throws Exception {
-        TryonProperties pngProperties = new TryonProperties(20, 5, 2000, 3000, 60000,
-                "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "png");
-        TryonJobExecutor pngJobExecutor = new TryonJobExecutor(
-                tryonRequestRepository, tryonRequestItemRepository, tryonStepExecutor, fashnClient,
-                tryonPersistenceService, photoService, storageService, pngProperties, httpClient);
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonJobExecutor pngJobExecutor = jobExecutorWith(
+                propertiesWith("png", JOB_TIMEOUT_MS), Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC));
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of());
         stubSuccessfulDownload();
@@ -323,7 +428,7 @@ class TryonJobExecutorTest {
 
     @Test
     void run_resultStorageKeyDerivedFromStorageKeysUtil() throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         stubFrontPhotoResolution(request);
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of());
         stubSuccessfulDownload();
@@ -335,54 +440,77 @@ class TryonJobExecutorTest {
         verify(tryonPersistenceService).markRequestComplete(requestId, expectedKey);
     }
 
+    // ---------- shared assertions ----------
+
     private void assertRoutesToV16(GarmentRole role, String expectedCategory) throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         String frontPhotoUrl = stubFrontPhotoResolution(request);
         Product product = product(role);
         TryonRequestItem item = itemFor(product);
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
         stubSuccessfulDownload();
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Supplier<String>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
         jobExecutor.run(requestId);
 
-        verify(tryonStepExecutor).execute(supplierCaptor.capture());
-        supplierCaptor.getValue().get();
+        captureSubmitters().get(0).get();
 
         verify(fashnClient).submitTryonV16(frontPhotoUrl, product.getImageUrl(), expectedCategory);
         verify(fashnClient, never()).submitTryonMax(any(), any());
     }
 
     private void assertRoutesToMax(GarmentRole role) throws Exception {
-        TryonRequest request = TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+        TryonRequest request = pendingRequest();
         String frontPhotoUrl = stubFrontPhotoResolution(request);
         Product product = product(role);
         TryonRequestItem item = itemFor(product);
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
-        when(tryonStepExecutor.execute(any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
+        when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
         stubSuccessfulDownload();
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Supplier<String>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
         jobExecutor.run(requestId);
 
-        verify(tryonStepExecutor).execute(supplierCaptor.capture());
-        supplierCaptor.getValue().get();
+        captureSubmitters().get(0).get();
 
         verify(fashnClient).submitTryonMax(frontPhotoUrl, product.getImageUrl());
         verify(fashnClient, never()).submitTryonV16(any(), any(), any());
     }
 
+    // ---------- fixtures ----------
+
+    private TryonJobExecutor jobExecutorWith(TryonProperties tryonProperties, Clock clock) {
+        return new TryonJobExecutor(
+                tryonRequestRepository, tryonRequestItemRepository, tryonStepExecutor, fashnClient,
+                tryonPersistenceService, photoService, storageService, tryonProperties, httpClient, clock);
+    }
+
+    private TryonProperties propertiesWith(String outputFormat, long jobTimeoutMs) {
+        return new TryonProperties(20, 1, 2000, 3000, 180000, jobTimeoutMs,
+                "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", outputFormat);
+    }
+
+    private TryonRequest pendingRequest() {
+        return TryonRequest.builder().id(requestId).user(user).status(TryonRequestStatus.PENDING).build();
+    }
+
+    private String frontPhotoStorageKey() {
+        return "body-photos/" + userId + "/front.jpg";
+    }
+
     private String stubFrontPhotoResolution(TryonRequest request) {
         when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
-        String storageKey = "body-photos/" + userId + "/front.jpg";
         String frontPhotoUrl = "https://r2.example.com/front-presigned";
-        when(photoService.getStorageKey(userId, PhotoType.FRONT)).thenReturn(storageKey);
-        when(storageService.generateDownloadUrl(storageKey, StorageService.DEFAULT_TTL))
+        when(photoService.getStorageKey(userId, PhotoType.FRONT)).thenReturn(frontPhotoStorageKey());
+        lenient().when(storageService.generateDownloadUrl(frontPhotoStorageKey(), StorageService.DEFAULT_TTL))
                 .thenReturn(URI.create(frontPhotoUrl));
         return frontPhotoUrl;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Supplier<String>> captureSubmitters() {
+        ArgumentCaptor<Supplier<String>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
+        verify(tryonStepExecutor, org.mockito.Mockito.atLeastOnce()).execute(supplierCaptor.capture(), any());
+        return supplierCaptor.getAllValues();
     }
 
     private void stubSuccessfulDownload() throws Exception {
@@ -409,5 +537,33 @@ class TryonJobExecutorTest {
 
     private TryonRequestItem itemFor(Product product) {
         return TryonRequestItem.builder().id(UUID.randomUUID()).product(product).build();
+    }
+
+    private static final class AdvancingClock extends Clock {
+
+        private final Duration step;
+        private Instant instant;
+
+        private AdvancingClock(Instant start, Duration step) {
+            this.instant = start;
+            this.step = step;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            Instant current = instant;
+            instant = instant.plus(step);
+            return current;
+        }
     }
 }

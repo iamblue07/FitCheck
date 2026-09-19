@@ -1,8 +1,8 @@
 package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.ConflictException;
-import com.fitcheck.common.logging.support.SecurityEventLogger;
 import com.fitcheck.common.exception.UnauthorizedException;
+import com.fitcheck.common.logging.support.SecurityEventLogger;
 import com.fitcheck.common.security.properties.JwtProperties;
 import com.fitcheck.identity.dto.AuthResponse;
 import com.fitcheck.identity.dto.LoginRequest;
@@ -37,10 +37,12 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,9 +50,6 @@ class AuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
-
-    @Mock
-    private SecurityEventLogger securityEventLogger;
 
     @Mock
     private UserProfileRepository userProfileRepository;
@@ -66,6 +65,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private SecurityEventLogger securityEventLogger;
 
     private AuthService authService;
 
@@ -97,6 +99,12 @@ class AuthServiceTest {
                 .build();
     }
 
+    private void stubTokenIssuance() {
+        when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
+        when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
+        when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
+    }
+
     // ---- register ----
 
     @Test
@@ -105,9 +113,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
-        when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
-        when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
+        stubTokenIssuance();
 
         authService.register(request);
 
@@ -123,7 +129,22 @@ class AuthServiceTest {
     }
 
     @Test
-    void register_duplicateEmail_throwsConflictException() {
+    void register_success_auditsRegistrationWithThePersistedUserId() {
+        RegisterRequest request = new RegisterRequest("new@example.com", "password123");
+        User persisted = buildUser("new@example.com", Role.USER);
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
+        when(userRepository.saveAndFlush(any(User.class))).thenReturn(persisted);
+        stubTokenIssuance();
+
+        authService.register(request);
+
+        verify(securityEventLogger).registrationSucceeded(persisted.getId());
+        verify(securityEventLogger, never()).loginFailed();
+    }
+
+    @Test
+    void register_duplicateEmail_throwsConflictExceptionAndAuditsNothing() {
         RegisterRequest request = new RegisterRequest("existing@example.com", "password123");
         when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
@@ -131,6 +152,7 @@ class AuthServiceTest {
                 .isInstanceOf(ConflictException.class);
 
         verify(userRepository, never()).saveAndFlush(any(User.class));
+        verifyNoInteractions(securityEventLogger);
     }
 
     @Test
@@ -146,6 +168,7 @@ class AuthServiceTest {
                 .hasMessage("An account with this email already exists");
 
         verify(userProfileRepository, never()).save(any(UserProfile.class));
+        verifyNoInteractions(securityEventLogger);
     }
 
     @Test
@@ -154,9 +177,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("mixedcase@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
-        when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
-        when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
+        stubTokenIssuance();
 
         authService.register(request);
 
@@ -171,9 +192,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(passwordEncoder.encode("plainTextPassword123")).thenReturn("{bcrypt}$2a$10$hashedvalue");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token");
-        when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-token");
-        when(jwtService.hashToken("raw-refresh-token")).thenReturn("refresh-token-hash");
+        stubTokenIssuance();
 
         authService.register(request);
 
@@ -203,6 +222,21 @@ class AuthServiceTest {
     }
 
     @Test
+    void login_success_auditsLoginWithTheResolvedUserIdAndNeverTheEmail() {
+        User existingUser = buildUser("user@example.com", Role.USER);
+        LoginRequest request = new LoginRequest("user@example.com", "correctPassword");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existingUser));
+        when(jwtService.generateAccessToken(existingUser)).thenReturn("access-token-123");
+        when(jwtService.generateRefreshToken()).thenReturn("raw-refresh-456");
+        when(jwtService.hashToken("raw-refresh-456")).thenReturn("hashed-456");
+
+        authService.login(request);
+
+        verify(securityEventLogger).loginSucceeded(existingUser.getId());
+        verify(securityEventLogger, never()).loginFailed();
+    }
+
+    @Test
     void login_wrongPassword_throwsUnauthorizedExceptionWithGenericMessage() {
         LoginRequest request = new LoginRequest("user@example.com", "wrongPassword");
         when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
@@ -210,6 +244,18 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Invalid email or password");
+    }
+
+    @Test
+    void login_badCredentials_auditsAFailureBeforeThrowing() {
+        LoginRequest request = new LoginRequest("user@example.com", "wrongPassword");
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(securityEventLogger).loginFailed();
+        verify(securityEventLogger, never()).loginSucceeded(any());
     }
 
     @Test
@@ -228,6 +274,7 @@ class AuthServiceTest {
                 () -> authService.login(nonexistentEmailRequest)).getMessage();
 
         assertThat(wrongPasswordMessage).isEqualTo(nonexistentEmailMessage);
+        verify(securityEventLogger, times(2)).loginFailed();
     }
 
     // ---- refresh ----
@@ -250,6 +297,24 @@ class AuthServiceTest {
         assertThat(response.refreshToken()).isNotEqualTo("raw-old-token");
         assertThat(storedToken.getRevokedAt()).isNotNull();
         verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void refresh_successfulRotation_auditsTokenRotationForTheOwningUser() {
+        User owner = buildUser("user@example.com", Role.USER);
+        RefreshToken storedToken = buildRefreshToken(owner, "old-token-hash", LocalDateTime.now().plusDays(1), null);
+        RefreshRequest request = new RefreshRequest("raw-old-token");
+
+        when(jwtService.hashToken("raw-old-token")).thenReturn("old-token-hash");
+        when(refreshTokenRepository.findByTokenHash("old-token-hash")).thenReturn(Optional.of(storedToken));
+        when(jwtService.generateAccessToken(owner)).thenReturn("new-access-token");
+        when(jwtService.generateRefreshToken()).thenReturn("raw-new-token");
+        when(jwtService.hashToken("raw-new-token")).thenReturn("new-token-hash");
+
+        authService.refresh(request);
+
+        verify(securityEventLogger).refreshTokenRotated(owner.getId());
+        verify(securityEventLogger, never()).refreshTokenReuseDetected(any(), anyInt());
     }
 
     @Test
@@ -276,7 +341,28 @@ class AuthServiceTest {
     }
 
     @Test
-    void refresh_expiredToken_throwsUnauthorizedException() {
+    void refresh_revokedTokenReused_auditsTheftDetectionWithTheRevokedTokenCount() {
+        User owner = buildUser("victim@example.com", Role.USER);
+        RefreshToken reusedToken = buildRefreshToken(owner, "stolen-token-hash",
+                LocalDateTime.now().plusDays(1), LocalDateTime.now().minusHours(1));
+        RefreshToken otherActiveToken1 = buildRefreshToken(owner, "other-hash-1", LocalDateTime.now().plusDays(2), null);
+        RefreshToken otherActiveToken2 = buildRefreshToken(owner, "other-hash-2", LocalDateTime.now().plusDays(3), null);
+        RefreshRequest request = new RefreshRequest("raw-stolen-token");
+
+        when(jwtService.hashToken("raw-stolen-token")).thenReturn("stolen-token-hash");
+        when(refreshTokenRepository.findByTokenHash("stolen-token-hash")).thenReturn(Optional.of(reusedToken));
+        when(refreshTokenRepository.findByUser_IdAndRevokedAtIsNull(owner.getId()))
+                .thenReturn(List.of(otherActiveToken1, otherActiveToken2));
+
+        assertThatThrownBy(() -> authService.refresh(request))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(securityEventLogger).refreshTokenReuseDetected(owner.getId(), 2);
+        verify(securityEventLogger, never()).refreshTokenRotated(any());
+    }
+
+    @Test
+    void refresh_expiredToken_throwsUnauthorizedExceptionAndAuditsNothing() {
         User owner = buildUser("user@example.com", Role.USER);
         RefreshToken expiredToken = buildRefreshToken(owner, "expired-hash", LocalDateTime.now().minusMinutes(1), null);
         RefreshRequest request = new RefreshRequest("raw-expired-token");
@@ -290,6 +376,7 @@ class AuthServiceTest {
 
         verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
         verify(jwtService, never()).generateAccessToken(any(User.class));
+        verifyNoInteractions(securityEventLogger);
     }
 
     @Test
@@ -301,6 +388,8 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.refresh(request))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Invalid refresh token");
+
+        verifyNoInteractions(securityEventLogger);
     }
 
     // ---- logout ----
@@ -321,7 +410,21 @@ class AuthServiceTest {
     }
 
     @Test
-    void logout_unknownOrAlreadyRevokedToken_noOpDoesNotThrow() {
+    void logout_tokenActuallyRevoked_auditsLogoutForTheOwningUser() {
+        User owner = buildUser("user@example.com", Role.USER);
+        RefreshToken activeToken = buildRefreshToken(owner, "active-hash", LocalDateTime.now().plusDays(1), null);
+        LogoutRequest request = new LogoutRequest("raw-active-token");
+
+        when(jwtService.hashToken("raw-active-token")).thenReturn("active-hash");
+        when(refreshTokenRepository.findByTokenHash("active-hash")).thenReturn(Optional.of(activeToken));
+
+        authService.logout(request);
+
+        verify(securityEventLogger).logoutSucceeded(owner.getId());
+    }
+
+    @Test
+    void logout_unknownOrAlreadyRevokedToken_noOpDoesNotThrowAndAuditsNothing() {
         LogoutRequest unknownTokenRequest = new LogoutRequest("raw-unknown-token");
         when(jwtService.hashToken("raw-unknown-token")).thenReturn("unknown-hash");
         when(refreshTokenRepository.findByTokenHash("unknown-hash")).thenReturn(Optional.empty());
@@ -338,5 +441,6 @@ class AuthServiceTest {
         assertThatCode(() -> authService.logout(alreadyRevokedRequest)).doesNotThrowAnyException();
 
         verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        verifyNoInteractions(securityEventLogger);
     }
 }

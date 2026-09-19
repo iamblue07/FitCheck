@@ -2,6 +2,7 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.ai.util.EmbeddingVectorTruncator;
+import com.fitcheck.common.logging.enums.ExternalCallOutcome;
 import com.fitcheck.common.logging.support.ExternalCallLogger;
 import lombok.AllArgsConstructor;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
@@ -24,11 +25,12 @@ public class PromptQueryEmbeddingService {
         try {
             rawEmbedding = openAiEmbeddingModel.embed(text);
         } catch (RuntimeException e) {
-            externalCallLogger.logCall(PROVIDER, OPERATION_EMBED, elapsedMs(startedAt), false);
+            externalCallLogger.logCall(PROVIDER, OPERATION_EMBED, elapsedMs(startedAt),
+                    ExternalCallOutcome.PERMANENT_FAILURE);
             throw e;
         }
 
-        externalCallLogger.logCall(PROVIDER, OPERATION_EMBED, elapsedMs(startedAt), true);
+        externalCallLogger.logCall(PROVIDER, OPERATION_EMBED, elapsedMs(startedAt), ExternalCallOutcome.SUCCESS);
         return Vector.of(EmbeddingVectorTruncator.truncateAndNormalize(rawEmbedding, Product.TEXT_EMBEDDING_DIMENSIONS));
     }
 

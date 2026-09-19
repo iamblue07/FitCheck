@@ -24,6 +24,7 @@ public class OutfitPersistenceService {
 
     private final OutfitRepository outfitRepository;
     private final OutfitItemRepository outfitItemRepository;
+    private final OutfitInsertService outfitInsertService;
 
     public Optional<Outfit> findExisting(String itemSetHash) {
         return outfitRepository.findByItemSetHash(itemSetHash);
@@ -32,16 +33,7 @@ public class OutfitPersistenceService {
     @Transactional
     public Outfit saveNew(List<Product> selected, CompatibilityScoreBreakdown breakdown, String itemSetHash,
                           OutfitSource source) {
-        Outfit outfit = Outfit.builder()
-                .source(source)
-                .compatibilityScore(breakdown.finalScore())
-                .colorScore(breakdown.colorScore())
-                .layeringScore(breakdown.layeringScore())
-                .structuredScore(breakdown.structuredScore())
-                .embeddingScore(breakdown.embeddingScore())
-                .itemSetHash(itemSetHash)
-                .build();
-        outfit = outfitRepository.saveAndFlush(outfit);
+        Outfit outfit = outfitInsertService.insert(breakdown, itemSetHash, source);
 
         List<OutfitItem> items = new ArrayList<>();
         for (Product product : selected) {
@@ -85,7 +77,8 @@ public class OutfitPersistenceService {
             Outfit outfit = resolvedByHash.get(candidate.itemSetHash());
             if (outfit == null) {
                 try {
-                    outfit = saveNewOutfitRow(candidate);
+                    outfit = outfitInsertService.insert(
+                            candidate.breakdown(), candidate.itemSetHash(), candidate.source());
                     newItems.addAll(buildOutfitItems(outfit, candidate.products()));
                 } catch (DataIntegrityViolationException e) {
                     outfit = findExisting(candidate.itemSetHash())
@@ -101,19 +94,6 @@ public class OutfitPersistenceService {
         outfitItemRepository.saveAll(newItems);
 
         return results;
-    }
-
-    private Outfit saveNewOutfitRow(PersistenceCandidate candidate) {
-        Outfit outfit = Outfit.builder()
-                .source(candidate.source())
-                .compatibilityScore(candidate.breakdown().finalScore())
-                .colorScore(candidate.breakdown().colorScore())
-                .layeringScore(candidate.breakdown().layeringScore())
-                .structuredScore(candidate.breakdown().structuredScore())
-                .embeddingScore(candidate.breakdown().embeddingScore())
-                .itemSetHash(candidate.itemSetHash())
-                .build();
-        return outfitRepository.saveAndFlush(outfit);
     }
 
     private List<OutfitItem> buildOutfitItems(Outfit outfit, List<Product> products) {

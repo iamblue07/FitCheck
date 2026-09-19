@@ -1,14 +1,7 @@
 package com.fitcheck.identity.controller;
 
-import com.fitcheck.common.config.CommonBeansConfig;
-import com.fitcheck.common.exception.support.ErrorResponseFactory;
-import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
-import com.fitcheck.common.security.config.JwtConfig;
-import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
-import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
-import com.fitcheck.common.security.config.SecurityConfig;
-import com.fitcheck.identity.service.AppUserDetailsService;
 import com.fitcheck.identity.service.PhotoService;
+import com.fitcheck.support.WebSliceTestConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -25,28 +18,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(PhotoController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
-        ErrorResponseFactory.class, CommonBeansConfig.class})
+@Import(WebSliceTestConfig.class)
 @TestPropertySource(properties = {
-        "jwt.secret=" + PhotoControllerTest.TEST_JWT_SECRET,
-        "jwt.access-expiration=900000",
-        "jwt.refresh-expiration=604800000"
+        WebSliceTestConfig.JWT_SECRET_PROPERTY,
+        WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY
 })
 class PhotoControllerTest {
-
-    static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
-
-    @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private PhotoService photoService;
-
-    @MockitoBean
-    private AppUserDetailsService appUserDetailsService;
 
     @Test
     void generateUploadUrl_missingPhotoType_returns400() throws Exception {

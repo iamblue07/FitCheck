@@ -4,10 +4,12 @@ import com.fitcheck.common.openapi.annotation.StandardApiErrors;
 import com.fitcheck.social.dto.InteractionStateResponse;
 import com.fitcheck.social.dto.SavedOutfitsResponse;
 import com.fitcheck.social.enums.InteractionType;
+import com.fitcheck.social.properties.SocialProperties;
 import com.fitcheck.social.service.OutfitInteractionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
@@ -27,13 +29,12 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/outfits")
 @AllArgsConstructor
+@EnableConfigurationProperties(SocialProperties.class)
 @Tag(name = "Social interactions", description = "Likes and saves on outfits, and the caller's saved list")
 public class OutfitInteractionController {
 
-    private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final int MAX_PAGE_SIZE = 100;
-
     private final OutfitInteractionService outfitInteractionService;
+    private final SocialProperties socialProperties;
 
     @Operation(summary = "Like an outfit; idempotent, liking an already-liked outfit is a no-op")
     @StandardApiErrors
@@ -71,7 +72,7 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.deactivate(userId, outfitId, InteractionType.SAVE));
     }
 
-    @Operation(summary = "List the caller's saved outfits, most recently saved first; size is clamped to 100")
+    @Operation(summary = "List the caller's saved outfits, most recently saved first; size is clamped to the configured maximum")
     @StandardApiErrors
     @GetMapping("/saved")
     public ResponseEntity<SavedOutfitsResponse> listSaved(@AuthenticationPrincipal Jwt jwt,
@@ -82,7 +83,8 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.listSaved(userId, pageable));
     }
 
-    @Operation(summary = "Get every outfit id the caller has liked or saved, so a client can reconcile heart and bookmark state locally")
+    @Operation(summary = "Get every outfit id the caller has liked or saved, so a client can reconcile heart and bookmark state locally. "
+            + "Values are uppercase: LIKE, SAVE or SHARE. SHARE is accepted but nothing writes share rows yet, so it always returns an empty set")
     @StandardApiErrors
     @GetMapping("/interactions/mine")
     public ResponseEntity<Set<UUID>> listInteractedOutfitIds(@AuthenticationPrincipal Jwt jwt,
@@ -93,8 +95,8 @@ public class OutfitInteractionController {
 
     private int clampSize(int size) {
         if (size < 1) {
-            return DEFAULT_PAGE_SIZE;
+            return socialProperties.defaultPageSize();
         }
-        return Math.min(size, MAX_PAGE_SIZE);
+        return Math.min(size, socialProperties.maxPageSize());
     }
 }

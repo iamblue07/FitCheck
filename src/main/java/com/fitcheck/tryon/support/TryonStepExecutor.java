@@ -25,29 +25,47 @@ public class TryonStepExecutor {
     private final FashnClient fashnClient;
     private final TryonProperties properties;
     private final Clock clock;
+    private final FashnErrorClassifier fashnErrorClassifier;
 
-    public String execute(Supplier<String> predictionSubmitter) {
-        String lastErrorMessage = null;
+    public String execute(Supplier<String> predictionSubmitter, Instant jobDeadline) {
+        int attemptsRemaining = properties.maxRetriesPerItem();
 
-        for (int attempt = 0; attempt <= properties.maxRetriesPerItem(); attempt++) {
-            if (attempt > 0) {
+        while (true) {
+            String predictionId;
+            try {
+                predictionId = predictionSubmitter.get();
+            } catch (ExternalServiceException e) {
+                if (attemptsRemaining <= 0) {
+                    throw new ExternalServiceException(
+                            "FASHN try-on submission failed and no attempts remain: " + e.getMessage());
+                }
+                attemptsRemaining--;
                 sleep(properties.retryBackoffMs());
+                continue;
             }
 
-            String predictionId = predictionSubmitter.get();
-            AttemptOutcome outcome = pollUntilTerminal(predictionId);
+            AttemptOutcome outcome = pollUntilTerminal(predictionId, jobDeadline);
 
             if (outcome.succeeded()) {
                 return outcome.outputUrl();
             }
-            lastErrorMessage = outcome.errorMessage();
-        }
+            if (!outcome.retryable()) {
+                throw new ExternalServiceException(
+                        "FASHN try-on step failed permanently: " + outcome.errorMessage());
+            }
+            if (attemptsRemaining <= 0) {
+                throw new ExternalServiceException(
+                        "FASHN try-on step exhausted all retries: " + outcome.errorMessage());
+            }
 
-        throw new ExternalServiceException("FASHN try-on step exhausted all retries: " + lastErrorMessage);
+            attemptsRemaining--;
+            sleep(properties.retryBackoffMs());
+        }
     }
 
-    private AttemptOutcome pollUntilTerminal(String predictionId) {
-        Instant deadline = clock.instant().plus(Duration.ofMillis(properties.pollTimeoutMs()));
+    private AttemptOutcome pollUntilTerminal(String predictionId, Instant jobDeadline) {
+        Instant pollCeiling = clock.instant().plus(Duration.ofMillis(properties.pollTimeoutMs()));
+        Instant deadline = jobDeadline.isBefore(pollCeiling) ? jobDeadline : pollCeiling;
 
         while (clock.instant().isBefore(deadline)) {
             FashnPredictionResult result = fashnClient.poll(predictionId);
@@ -55,19 +73,22 @@ public class TryonStepExecutor {
             if (TERMINAL_STATUSES.contains(result.status())) {
                 if (STATUS_COMPLETED.equals(result.status())) {
                     if (result.output() == null || result.output().isEmpty()) {
-                        return AttemptOutcome.failure(
+                        return AttemptOutcome.permanentFailure(
                                 "FASHN prediction " + result.id() + " completed with no output image");
                     }
                     return AttemptOutcome.success(result.output().get(0));
                 }
-                return AttemptOutcome.failure(describeFailure(result));
+                String description = describeFailure(result);
+                return fashnErrorClassifier.isRetryable(result)
+                        ? AttemptOutcome.transientFailure(description)
+                        : AttemptOutcome.permanentFailure(description);
             }
 
             sleep(properties.pollIntervalMs());
         }
 
-        return AttemptOutcome.failure(
-                "Polling timed out after " + properties.pollTimeoutMs() + "ms for prediction " + predictionId);
+        return AttemptOutcome.permanentFailure(
+                "Polling timed out waiting for prediction " + predictionId);
     }
 
     private String describeFailure(FashnPredictionResult result) {
@@ -86,14 +107,18 @@ public class TryonStepExecutor {
         }
     }
 
-    private record AttemptOutcome(boolean succeeded, String outputUrl, String errorMessage) {
+    private record AttemptOutcome(boolean succeeded, boolean retryable, String outputUrl, String errorMessage) {
 
         static AttemptOutcome success(String outputUrl) {
-            return new AttemptOutcome(true, outputUrl, null);
+            return new AttemptOutcome(true, false, outputUrl, null);
         }
 
-        static AttemptOutcome failure(String errorMessage) {
-            return new AttemptOutcome(false, null, errorMessage);
+        static AttemptOutcome transientFailure(String errorMessage) {
+            return new AttemptOutcome(false, true, null, errorMessage);
+        }
+
+        static AttemptOutcome permanentFailure(String errorMessage) {
+            return new AttemptOutcome(false, false, null, errorMessage);
         }
     }
 }
