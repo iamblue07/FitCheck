@@ -18,7 +18,6 @@ import com.fitcheck.outfit.support.OutfitGenderFilterResolver;
 import com.fitcheck.outfit.support.OutfitItemSetHasher;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
@@ -26,7 +25,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -99,7 +97,8 @@ public class GarmentSwapService {
         CompatibilityScoreBreakdown breakdown = compatibilityScorer.score(finalProducts);
         String itemSetHash = itemSetHasher.hash(finalProducts);
 
-        Outfit resultOutfit = persistOrReuse(finalProducts, breakdown, itemSetHash);
+        Outfit resultOutfit = outfitPersistenceService.saveOrReuse(
+                finalProducts, breakdown, itemSetHash, OutfitSource.MANUAL_SWAP);
 
         List<OutfitItemView> items = outfitItemQueryService.findItemViews(resultOutfit.getId());
         BigDecimal totalPrice = outfitItemQueryService.sumBasePrice(resultOutfit.getId());
@@ -121,22 +120,6 @@ public class GarmentSwapService {
         if (budgetCeilingResolver.exceedsBudget(outfitTotal, targetProduct.getBasePrice(), candidate.getBasePrice(), ceiling)) {
             throw new BadRequestException(
                     "Swapping in product " + candidate.getId() + " would exceed the outfit's budget ceiling");
-        }
-    }
-
-    private Outfit persistOrReuse(List<Product> finalProducts, CompatibilityScoreBreakdown breakdown, String itemSetHash) {
-        Optional<Outfit> existing = outfitPersistenceService.findExisting(itemSetHash);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        try {
-            return outfitPersistenceService.saveNew(finalProducts, breakdown, itemSetHash, OutfitSource.MANUAL_SWAP);
-        } catch (DataIntegrityViolationException e) {
-            return outfitPersistenceService.findExisting(itemSetHash)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Outfit insert failed on unique constraint but no existing row found for hash "
-                                    + itemSetHash, e));
         }
     }
 }

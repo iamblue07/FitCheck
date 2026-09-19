@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
@@ -93,6 +94,57 @@ class OutfitPersistenceServiceTest {
         assertThat(items.get(0).getSlot()).isEqualTo(GarmentRole.TOP);
         assertThat(items.get(1).getProduct()).isEqualTo(footwear);
         assertThat(items.get(1).getSlot()).isEqualTo(GarmentRole.FOOTWEAR);
+    }
+
+    @Test
+    void saveOrReuse_existingHash_returnsExistingWithoutInserting() {
+        Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+        Outfit existing = Outfit.builder().id(UUID.randomUUID()).itemSetHash("hash").build();
+        when(outfitRepository.findByItemSetHash("hash")).thenReturn(Optional.of(existing));
+
+        Outfit result = service.saveOrReuse(List.of(product), breakdownOf("0.5"), "hash", OutfitSource.MANUAL_SWAP);
+
+        assertThat(result).isSameAs(existing);
+        verify(outfitRepository, never()).saveAndFlush(any());
+        verify(outfitItemRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void saveOrReuse_raceOnInsert_fallsBackToExistingWithoutPropagatingException() {
+        Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+        Outfit wonByOtherTransaction = Outfit.builder().id(UUID.randomUUID()).itemSetHash("hash").build();
+
+        when(outfitRepository.findByItemSetHash("hash"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(wonByOtherTransaction));
+        when(outfitRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates uq item_set_hash"));
+
+        Outfit result = service.saveOrReuse(List.of(product), breakdownOf("0.5"), "hash", OutfitSource.MANUAL_SWAP);
+
+        assertThat(result).isSameAs(wonByOtherTransaction);
+        verify(outfitRepository, times(1)).saveAndFlush(any());
+        verify(outfitRepository, times(2)).findByItemSetHash("hash");
+        verify(outfitItemRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void saveOrReuse_raceOnInsertButStillNotFoundOnRetry_throwsIllegalStateException() {
+        Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+        DataIntegrityViolationException cause =
+                new DataIntegrityViolationException("duplicate key value violates uq item_set_hash");
+
+        when(outfitRepository.findByItemSetHash("hash")).thenReturn(Optional.empty());
+        when(outfitRepository.saveAndFlush(any())).thenThrow(cause);
+
+        assertThatThrownBy(() ->
+                service.saveOrReuse(List.of(product), breakdownOf("0.5"), "hash", OutfitSource.MANUAL_SWAP))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("hash")
+                .hasCause(cause);
+
+        verify(outfitRepository, times(1)).saveAndFlush(any());
+        verify(outfitRepository, times(2)).findByItemSetHash("hash");
     }
 
     @Test
@@ -174,5 +226,10 @@ class OutfitPersistenceServiceTest {
 
         assertThat(results.get(0)).isEqualTo(wonByOtherTransaction);
         assertThat(results.get(1).getItemSetHash()).isEqualTo("hash-clean");
+    }
+
+    private CompatibilityScoreBreakdown breakdownOf(String score) {
+        BigDecimal value = new BigDecimal(score);
+        return new CompatibilityScoreBreakdown(value, value, value, value, value);
     }
 }

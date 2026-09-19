@@ -26,7 +26,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 
 import java.math.BigDecimal;
@@ -39,7 +38,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -354,20 +352,19 @@ class GarmentSwapServiceTest {
         when(userProfileQueryService.getById(userId)).thenReturn(profileWith(userId, Sex.MALE, null));
         when(outfitItemQueryService.sumBasePrice(outfitId)).thenReturn(new BigDecimal("100"));
         when(compatibilityScorer.score(anyList())).thenReturn(breakdownWithFinalScore("0.5"));
-        when(outfitPersistenceService.findExisting(any())).thenReturn(Optional.empty());
 
-        Outfit saved = Outfit.builder().id(UUID.randomUUID()).build();
-        when(outfitPersistenceService.saveNew(any(), any(), any(), eq(OutfitSource.MANUAL_SWAP))).thenReturn(saved);
-        when(outfitItemQueryService.findItemViews(saved.getId())).thenReturn(List.of());
-        when(outfitItemQueryService.sumBasePrice(saved.getId())).thenReturn(new BigDecimal("100045"));
+        Outfit persisted = Outfit.builder().id(UUID.randomUUID()).build();
+        when(outfitPersistenceService.saveOrReuse(any(), any(), any(), eq(OutfitSource.MANUAL_SWAP))).thenReturn(persisted);
+        when(outfitItemQueryService.findItemViews(persisted.getId())).thenReturn(List.of());
+        when(outfitItemQueryService.sumBasePrice(persisted.getId())).thenReturn(new BigDecimal("100045"));
 
         OutfitResponse response = service.swap(outfitId, itemId, expensive.getId(), userId);
 
-        assertThat(response.outfitId()).isEqualTo(saved.getId());
+        assertThat(response.outfitId()).isEqualTo(persisted.getId());
     }
 
     @Test
-    void swap_newItemSetHash_savesNewOutfitWithManualSwapSourceAndCorrectProductList() {
+    void swap_delegatesPersistenceToSaveOrReuseWithManualSwapSourceAndBuildsResponseFromItsResult() {
         UUID outfitId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
@@ -382,83 +379,31 @@ class GarmentSwapServiceTest {
 
         CompatibilityScoreBreakdown breakdown = breakdownWithFinalScore("0.77");
         when(compatibilityScorer.score(anyList())).thenReturn(breakdown);
-        when(outfitPersistenceService.findExisting(any())).thenReturn(Optional.empty());
 
-        Outfit saved = Outfit.builder().id(UUID.randomUUID()).build();
-        when(outfitPersistenceService.saveNew(any(), eq(breakdown), any(), eq(OutfitSource.MANUAL_SWAP))).thenReturn(saved);
+        Outfit persisted = Outfit.builder().id(UUID.randomUUID()).build();
+        when(outfitPersistenceService.saveOrReuse(any(), eq(breakdown), any(), eq(OutfitSource.MANUAL_SWAP)))
+                .thenReturn(persisted);
 
         List<OutfitItemView> mappedItems = List.of(
                 new OutfitItemView(UUID.randomUUID(), other.getId(), other.getProductDisplayName(), other.getImageUrl(), other.getBasePrice(), other.getGarmentRole()),
                 new OutfitItemView(UUID.randomUUID(), candidate.getId(), candidate.getProductDisplayName(), candidate.getImageUrl(), candidate.getBasePrice(), candidate.getGarmentRole()));
-        when(outfitItemQueryService.findItemViews(saved.getId())).thenReturn(mappedItems);
-        when(outfitItemQueryService.sumBasePrice(saved.getId())).thenReturn(new BigDecimal("105"));
+        when(outfitItemQueryService.findItemViews(persisted.getId())).thenReturn(mappedItems);
+        when(outfitItemQueryService.sumBasePrice(persisted.getId())).thenReturn(new BigDecimal("105"));
 
         OutfitResponse response = service.swap(outfitId, itemId, candidate.getId(), userId);
 
         ArgumentCaptor<List<Product>> productsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(outfitPersistenceService).saveNew(productsCaptor.capture(), eq(breakdown), any(), eq(OutfitSource.MANUAL_SWAP));
+        ArgumentCaptor<String> hashCaptor = ArgumentCaptor.forClass(String.class);
+        verify(outfitPersistenceService).saveOrReuse(
+                productsCaptor.capture(), eq(breakdown), hashCaptor.capture(), eq(OutfitSource.MANUAL_SWAP));
         assertThat(productsCaptor.getValue()).containsExactlyInAnyOrder(other, candidate);
         assertThat(productsCaptor.getValue()).doesNotContain(target);
+        assertThat(hashCaptor.getValue()).isEqualTo(itemSetHasher.hash(List.of(other, candidate)));
 
-        assertThat(response.outfitId()).isEqualTo(saved.getId());
+        assertThat(response.outfitId()).isEqualTo(persisted.getId());
         assertThat(response.compatibilityBreakdown()).isEqualTo(breakdown);
         assertThat(response.totalPrice()).isEqualByComparingTo("105");
         assertThat(response.items()).isEqualTo(mappedItems);
-    }
-
-    @Test
-    void swap_itemSetHashAlreadyExists_reusesExistingOutfitWithoutCallingSaveNew() {
-        UUID outfitId = UUID.randomUUID();
-        UUID itemId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
-        Product target = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("40"), GarmentRole.TOP);
-        Product other = productWith(UUID.randomUUID(), "Jeans", "Men", new BigDecimal("60"), GarmentRole.BOTTOM);
-        stubOutfitContext(outfitId, itemId, target, other);
-
-        Product candidate = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("45"), GarmentRole.TOP);
-        when(productSearchService.findById(candidate.getId())).thenReturn(Optional.of(candidate));
-        when(userProfileQueryService.getById(userId)).thenReturn(profileWith(userId, Sex.MALE, null));
-        when(outfitItemQueryService.sumBasePrice(outfitId)).thenReturn(new BigDecimal("100"));
-        when(compatibilityScorer.score(anyList())).thenReturn(breakdownWithFinalScore("0.6"));
-
-        Outfit existing = Outfit.builder().id(UUID.randomUUID()).build();
-        when(outfitPersistenceService.findExisting(any())).thenReturn(Optional.of(existing));
-        when(outfitItemQueryService.findItemViews(existing.getId())).thenReturn(List.of());
-        when(outfitItemQueryService.sumBasePrice(existing.getId())).thenReturn(new BigDecimal("105"));
-
-        OutfitResponse response = service.swap(outfitId, itemId, candidate.getId(), userId);
-
-        assertThat(response.outfitId()).isEqualTo(existing.getId());
-        verify(outfitPersistenceService, never()).saveNew(any(), any(), any(), any());
-    }
-
-    @Test
-    void swap_concurrentInsertRace_reQueriesAndReusesTheWinner() {
-        UUID outfitId = UUID.randomUUID();
-        UUID itemId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
-        Product target = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("40"), GarmentRole.TOP);
-        Product other = productWith(UUID.randomUUID(), "Jeans", "Men", new BigDecimal("60"), GarmentRole.BOTTOM);
-        stubOutfitContext(outfitId, itemId, target, other);
-
-        Product candidate = productWith(UUID.randomUUID(), "Tshirts", "Men", new BigDecimal("45"), GarmentRole.TOP);
-        when(productSearchService.findById(candidate.getId())).thenReturn(Optional.of(candidate));
-        when(userProfileQueryService.getById(userId)).thenReturn(profileWith(userId, Sex.MALE, null));
-        when(outfitItemQueryService.sumBasePrice(outfitId)).thenReturn(new BigDecimal("100"));
-        when(compatibilityScorer.score(anyList())).thenReturn(breakdownWithFinalScore("0.6"));
-
-        Outfit wonByOtherRequest = Outfit.builder().id(UUID.randomUUID()).build();
-        when(outfitPersistenceService.findExisting(any()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(wonByOtherRequest));
-        when(outfitPersistenceService.saveNew(any(), any(), any(), any()))
-                .thenThrow(new DataIntegrityViolationException("duplicate item_set_hash"));
-        when(outfitItemQueryService.findItemViews(wonByOtherRequest.getId())).thenReturn(List.of());
-        when(outfitItemQueryService.sumBasePrice(wonByOtherRequest.getId())).thenReturn(new BigDecimal("105"));
-
-        OutfitResponse response = service.swap(outfitId, itemId, candidate.getId(), userId);
-
-        assertThat(response.outfitId()).isEqualTo(wonByOtherRequest.getId());
     }
 
     // ---------- fixtures ----------
