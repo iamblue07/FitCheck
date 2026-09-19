@@ -116,6 +116,11 @@ public class OutfitItemQueryService {
         return outfitRepository.getReferenceById(outfitId);
     }
 
+    public Outfit getById(UUID outfitId) {
+        return outfitRepository.findById(outfitId)
+                .orElseThrow(() -> new ResourceNotFoundException("Outfit not found: " + outfitId));
+    }
+
     public record OutfitItemContext(OutfitItem targetItem, List<Product> otherProducts) {
     }
 }
