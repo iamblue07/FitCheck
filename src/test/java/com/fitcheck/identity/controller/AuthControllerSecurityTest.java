@@ -1,5 +1,8 @@
 package com.fitcheck.identity.controller;
 
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
+import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.security.config.JwtConfig;
 import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
 import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
@@ -26,6 +29,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -34,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
+        ErrorResponseFactory.class, CommonBeansConfig.class})
 @TestPropertySource(properties = {
         "jwt.secret=" + AuthControllerSecurityTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",
@@ -46,6 +51,9 @@ class AuthControllerSecurityTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @MockitoBean
     private AuthService authService;
@@ -61,7 +69,9 @@ class AuthControllerSecurityTest {
         mockMvc.perform(get("/api/v1/anything"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.error").value("Unauthorized"));
+                .andExpect(jsonPath("$.error").value("Unauthorized"))
+                .andExpect(jsonPath("$.path").value("/api/v1/anything"))
+                .andExpect(jsonPath("$.timestamp").exists());
     }
 
     @Test
@@ -83,6 +93,8 @@ class AuthControllerSecurityTest {
                 .expiresAt(now.plus(Duration.ofMinutes(15)))
                 .claim("email", "test@example.com")
                 .claim("role", "USER")
+                .issuer("https://fitcheck.local")
+                .audience(List.of("fitcheck-api"))
                 .build();
         JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
 

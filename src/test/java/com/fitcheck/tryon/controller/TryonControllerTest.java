@@ -1,6 +1,9 @@
 package com.fitcheck.tryon.controller;
 
+import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.security.config.JwtConfig;
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import com.fitcheck.common.security.config.SecurityConfig;
 import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
 import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
@@ -27,6 +30,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -36,7 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TryonController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
+        ErrorResponseFactory.class, CommonBeansConfig.class})
 @TestPropertySource(properties = {
         "jwt.secret=" + TryonControllerTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",
@@ -48,6 +53,9 @@ class TryonControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @MockitoBean
     private TryonRequestService tryonRequestService;
@@ -130,6 +138,8 @@ class TryonControllerTest {
                 .expiresAt(now.plus(Duration.ofMinutes(15)))
                 .claim("email", "test@example.com")
                 .claim("role", "USER")
+                .issuer("https://fitcheck.local")
+                .audience(List.of("fitcheck-api"))
                 .build();
         JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
 

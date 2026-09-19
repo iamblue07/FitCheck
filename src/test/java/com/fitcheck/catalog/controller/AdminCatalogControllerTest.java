@@ -2,6 +2,9 @@ package com.fitcheck.catalog.controller;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.service.CatalogEnrichmentService;
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
+import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.security.config.JwtConfig;
 import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
 import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
@@ -27,16 +30,19 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AdminCatalogController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
+        ErrorResponseFactory.class, CommonBeansConfig.class})
 @TestPropertySource(properties = {
         "jwt.secret=" + AdminCatalogControllerTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",
@@ -47,11 +53,16 @@ class AdminCatalogControllerTest {
 
     static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
 
+    private static final String ENRICH_NEXT_PATH = "/api/v1/admin/catalog/enrich-next";
+
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private CatalogEnrichmentService catalogEnrichmentService;
+
+    @MockitoBean
+    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @MockitoBean
     private AppUserDetailsService appUserDetailsService;
@@ -62,7 +73,7 @@ class AdminCatalogControllerTest {
         Product product = Product.builder().id(productId).productDisplayName("Blue Cotton Shirt").build();
         when(catalogEnrichmentService.enrichNext()).thenReturn(Optional.of(product));
 
-        mockMvc.perform(post("/admin/catalog/enrich-next")
+        mockMvc.perform(post(ENRICH_NEXT_PATH)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateToken("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enriched").value(true))
@@ -74,7 +85,7 @@ class AdminCatalogControllerTest {
     void enrichNext_nothingLeftToEnrich_returns200WithEnrichedFalse() throws Exception {
         when(catalogEnrichmentService.enrichNext()).thenReturn(Optional.empty());
 
-        mockMvc.perform(post("/admin/catalog/enrich-next")
+        mockMvc.perform(post(ENRICH_NEXT_PATH)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateToken("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enriched").value(false))
@@ -83,16 +94,28 @@ class AdminCatalogControllerTest {
     }
 
     @Test
-    void enrichNext_nonAdminRole_returns403() throws Exception {
-        mockMvc.perform(post("/admin/catalog/enrich-next")
+    void enrichNext_userRoleToken_returns403AndNeverReachesTheService() throws Exception {
+        mockMvc.perform(post(ENRICH_NEXT_PATH)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateToken("USER")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(catalogEnrichmentService);
     }
 
     @Test
     void enrichNext_missingToken_returns401() throws Exception {
-        mockMvc.perform(post("/admin/catalog/enrich-next"))
+        mockMvc.perform(post(ENRICH_NEXT_PATH))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void enrichNext_oldUnversionedAdminPath_isNoLongerMapped() throws Exception {
+        mockMvc.perform(post("/admin/catalog/enrich-next")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateToken("ADMIN")))
+                .andExpect(status().isNotFound());
+
+        verifyNoInteractions(catalogEnrichmentService);
     }
 
     private String generateToken(String role) {
@@ -102,6 +125,8 @@ class AdminCatalogControllerTest {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(UUID.randomUUID().toString())
+                .issuer("https://fitcheck.local")
+                .audience(List.of("fitcheck-api"))
                 .issuedAt(now)
                 .expiresAt(now.plus(Duration.ofMinutes(15)))
                 .claim("email", "test@example.com")

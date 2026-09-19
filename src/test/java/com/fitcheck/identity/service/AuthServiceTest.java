@@ -1,6 +1,7 @@
 package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.ConflictException;
+import com.fitcheck.common.logging.support.SecurityEventLogger;
 import com.fitcheck.common.exception.UnauthorizedException;
 import com.fitcheck.common.security.properties.JwtProperties;
 import com.fitcheck.identity.dto.AuthResponse;
@@ -49,6 +50,9 @@ class AuthServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private SecurityEventLogger securityEventLogger;
+
+    @Mock
     private UserProfileRepository userProfileRepository;
 
     @Mock
@@ -68,9 +72,10 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         JwtProperties jwtProperties = new JwtProperties(
-                "unused-by-authservice-directly", Duration.ofMinutes(15), Duration.ofDays(7));
+                "unused-by-authservice-directly", Duration.ofMinutes(15), Duration.ofDays(7),
+                "https://fitcheck.local", "fitcheck-api");
         authService = new AuthService(userRepository, userProfileRepository, refreshTokenRepository,
-                passwordEncoder, authenticationManager, jwtService, jwtProperties);
+                passwordEncoder, authenticationManager, jwtService, jwtProperties, securityEventLogger);
     }
 
     private User buildUser(String email, Role role) {

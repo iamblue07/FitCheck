@@ -105,7 +105,7 @@ class TryonRequestServiceTest {
     void submit_rateLimitExceeded_throwsRateLimitExceededExceptionAndNeverCreatesRequest() {
         Product product = Product.builder().id(UUID.randomUUID()).build();
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
-        when(inMemoryRateLimiter.tryConsume(userId, "tryon-submit", 20, Duration.ofHours(1))).thenReturn(false);
+        when(inMemoryRateLimiter.tryConsume(userId.toString(), "tryon-submit", 20, Duration.ofHours(1))).thenReturn(false);
 
         assertThatThrownBy(() -> service.submit(userId, outfitId))
                 .isInstanceOf(RateLimitExceededException.class);
@@ -123,7 +123,7 @@ class TryonRequestServiceTest {
 
         service.submit(userId, outfitId);
 
-        verify(inMemoryRateLimiter).tryConsume(userId, "tryon-submit", 20, Duration.ofHours(1));
+        verify(inMemoryRateLimiter).tryConsume(userId.toString(), "tryon-submit", 20, Duration.ofHours(1));
     }
 
     @Test

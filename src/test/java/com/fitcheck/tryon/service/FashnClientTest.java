@@ -1,6 +1,7 @@
 package com.fitcheck.tryon.service;
 
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.tryon.domain.FashnPredictionResult;
 import com.fitcheck.tryon.properties.TryonProperties;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,8 @@ class FashnClientTest {
     private FashnClient client;
     private TryonProperties properties;
 
+    private final ExternalCallLogger externalCallLogger = new ExternalCallLogger();
+
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
@@ -36,7 +39,7 @@ class FashnClientTest {
         properties = new TryonProperties(
                 20, 5, 2000, 3000, 60000,
                 "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
-        client = new FashnClient(restClient, properties);
+        client = new FashnClient(restClient, properties, externalCallLogger);
     }
 
     @Test
@@ -66,7 +69,7 @@ class FashnClientTest {
         TryonProperties customProperties = new TryonProperties(
                 20, 5, 2000, 3000, 60000,
                 "tryon-v1.7-preview", "performance", "tryon-max", "1k", "fast", "png");
-        FashnClient customClient = new FashnClient(restClient, customProperties);
+        FashnClient customClient = new FashnClient(restClient, customProperties, externalCallLogger);
 
         String expectedRequest = """
                 {"model_name":"tryon-v1.7-preview","inputs":{"model_image":"m","garment_image":"g","category":"bottoms","mode":"performance","output_format":"png"}}
@@ -108,8 +111,7 @@ class FashnClientTest {
         TryonProperties customProperties = new TryonProperties(
                 20, 5, 2000, 3000, 60000,
                 "tryon-v1.6", "balanced", "tryon-max", "4k", "quality", "jpeg");
-        FashnClient customClient = new FashnClient(restClient, customProperties);
-
+        FashnClient customClient = new FashnClient(restClient, customProperties, externalCallLogger);
         String expectedRequest = """
                 {"model_name":"tryon-max","inputs":{"model_image":"m","product_image":"p","resolution":"4k","generation_mode":"quality","output_format":"jpeg"}}
                 """;

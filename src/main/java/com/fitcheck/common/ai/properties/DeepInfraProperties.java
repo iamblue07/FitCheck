@@ -1,11 +1,14 @@
 package com.fitcheck.common.ai.properties;
 
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
+@Validated
 @ConfigurationProperties(prefix = "deepinfra")
 public record DeepInfraProperties(
-        String baseUrl,
-        String apiKey,
-        String embeddingModel
+        @NotBlank String baseUrl,
+        @NotBlank String apiKey,
+        @NotBlank String embeddingModel
 ) {
 }

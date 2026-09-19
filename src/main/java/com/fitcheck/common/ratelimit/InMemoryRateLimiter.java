@@ -8,7 +8,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -23,8 +22,8 @@ public class InMemoryRateLimiter {
         this.clock = clock;
     }
 
-    public boolean tryConsume(UUID userId, String operationKey, int limit, Duration window) {
-        RateLimitKey key = new RateLimitKey(userId, operationKey);
+    public boolean tryConsume(String subject, String operationKey, int limit, Duration window) {
+        RateLimitKey key = new RateLimitKey(subject, operationKey);
         Instant now = clock.instant();
         AtomicBoolean consumed = new AtomicBoolean(false);
 
@@ -55,7 +54,7 @@ public class InMemoryRateLimiter {
         }
     }
 
-    private record RateLimitKey(UUID userId, String operationKey) {
+    private record RateLimitKey(String subject, String operationKey) {
     }
 
     private record WindowState(Instant windowStart, Duration window, int count) {

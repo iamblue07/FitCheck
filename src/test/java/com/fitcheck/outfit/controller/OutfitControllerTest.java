@@ -1,6 +1,9 @@
 package com.fitcheck.outfit.controller;
 
 import com.fitcheck.common.exception.ResourceNotFoundException;
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
+import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.security.config.JwtConfig;
 import com.fitcheck.common.security.config.SecurityConfig;
 import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
@@ -44,7 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OutfitController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
+        ErrorResponseFactory.class, CommonBeansConfig.class})
 @TestPropertySource(properties = {
         "jwt.secret=" + OutfitControllerTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",
@@ -56,6 +60,9 @@ class OutfitControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @MockitoBean
     private OutfitItemQueryService outfitItemQueryService;
@@ -128,6 +135,8 @@ class OutfitControllerTest {
                 .expiresAt(now.plus(Duration.ofMinutes(15)))
                 .claim("email", "test@example.com")
                 .claim("role", "USER")
+                .issuer("https://fitcheck.local")
+                .audience(List.of("fitcheck-api"))
                 .build();
         JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
 

@@ -1,4 +1,4 @@
-package com.fitcheck.common.logging;
+package com.fitcheck.common.logging.support;
 
 import org.slf4j.MDC;
 import org.springframework.core.task.TaskDecorator;

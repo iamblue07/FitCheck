@@ -1,6 +1,7 @@
 package com.fitcheck.common.security.handler;
 
 import com.fitcheck.common.exception.dto.ErrorResponse;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 
 @Component
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
@@ -21,9 +21,11 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
     private static final Logger log = LoggerFactory.getLogger(RestAccessDeniedHandler.class);
 
     private final JsonMapper jsonMapper;
+    private final ErrorResponseFactory errorResponseFactory;
 
-    public RestAccessDeniedHandler(JsonMapper jsonMapper) {
+    public RestAccessDeniedHandler(JsonMapper jsonMapper, ErrorResponseFactory errorResponseFactory) {
         this.jsonMapper = jsonMapper;
+        this.errorResponseFactory = errorResponseFactory;
     }
 
     @Override
@@ -31,13 +33,10 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
                        AccessDeniedException accessDeniedException) throws IOException {
         log.warn("Access denied: {} {}", request.getMethod(), request.getRequestURI());
 
-        ErrorResponse body = new ErrorResponse(
-                LocalDateTime.now(),
-                HttpStatus.FORBIDDEN.value(),
-                HttpStatus.FORBIDDEN.getReasonPhrase(),
+        ErrorResponse body = errorResponseFactory.build(
+                HttpStatus.FORBIDDEN,
                 "You do not have permission to access this resource",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
 
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

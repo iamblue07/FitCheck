@@ -2,6 +2,7 @@ package com.fitcheck.identity.service;
 
 import com.fitcheck.common.exception.ConflictException;
 import com.fitcheck.common.exception.UnauthorizedException;
+import com.fitcheck.common.logging.support.SecurityEventLogger;
 import com.fitcheck.common.security.properties.JwtProperties;
 import com.fitcheck.identity.dto.AuthResponse;
 import com.fitcheck.identity.dto.LoginRequest;
@@ -39,6 +40,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
+    private final SecurityEventLogger securityEventLogger;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -64,7 +66,9 @@ public class AuthService {
                 .build();
         userProfileRepository.save(profile);
 
-        return issueTokens(user);
+        AuthResponse response = issueTokens(user);
+        securityEventLogger.registrationSucceeded(user.getId());
+        return response;
     }
 
     @Transactional
@@ -76,13 +80,16 @@ public class AuthService {
                     new UsernamePasswordAuthenticationToken(email, request.password())
             );
         } catch (BadCredentialsException e) {
+            securityEventLogger.loginFailed();
             throw new UnauthorizedException("Invalid email or password");
         }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user vanished: " + email));
 
-        return issueTokens(user);
+        AuthResponse response = issueTokens(user);
+        securityEventLogger.loginSucceeded(user.getId());
+        return response;
     }
 
     @Transactional
@@ -104,7 +111,9 @@ public class AuthService {
         storedToken.setRevokedAt(LocalDateTime.now());
         refreshTokenRepository.save(storedToken);
 
-        return issueTokens(storedToken.getUser());
+        AuthResponse response = issueTokens(storedToken.getUser());
+        securityEventLogger.refreshTokenRotated(storedToken.getUser().getId());
+        return response;
     }
 
     @Transactional
@@ -116,6 +125,7 @@ public class AuthService {
                 .ifPresent(token -> {
                     token.setRevokedAt(LocalDateTime.now());
                     refreshTokenRepository.save(token);
+                    securityEventLogger.logoutSucceeded(token.getUser().getId());
                 });
     }
 
@@ -124,6 +134,7 @@ public class AuthService {
         LocalDateTime now = LocalDateTime.now();
         activeTokens.forEach(token -> token.setRevokedAt(now));
         refreshTokenRepository.saveAll(activeTokens);
+        securityEventLogger.refreshTokenReuseDetected(userId, activeTokens.size());
     }
 
     private AuthResponse issueTokens(User user) {

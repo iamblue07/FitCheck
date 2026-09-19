@@ -18,6 +18,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 
 @AllArgsConstructor
 @Service
@@ -35,9 +36,10 @@ public class JwtService {
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(user.getId().toString())
+                .issuer(jwtProperties.issuer())
+                .audience(List.of(jwtProperties.audience()))
                 .issuedAt(now)
                 .expiresAt(now.plus(jwtProperties.accessExpiration()))
-                .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
                 .build();
 

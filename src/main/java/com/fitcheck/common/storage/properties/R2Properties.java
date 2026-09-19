@@ -1,12 +1,15 @@
 package com.fitcheck.common.storage.properties;
 
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
+@Validated
 @ConfigurationProperties(prefix = "r2")
 public record R2Properties(
-        String endpoint,
-        String accessKeyId,
-        String secretAccessKey,
-        String bucket
+        @NotBlank String endpoint,
+        @NotBlank String accessKeyId,
+        @NotBlank String secretAccessKey,
+        @NotBlank String bucket
 ) {
 }

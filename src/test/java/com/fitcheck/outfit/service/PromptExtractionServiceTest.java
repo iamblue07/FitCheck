@@ -2,6 +2,7 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.common.ai.properties.OllamaCloudProperties;
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.common.taxonomy.enums.GarmentRole;
 import com.fitcheck.outfit.properties.OutfitPromptProperties;
 import com.fitcheck.outfit.domain.StructuredPromptQuery;
@@ -31,13 +32,18 @@ class PromptExtractionServiceTest {
     @Mock
     private OllamaChatModel ollamaCloudChatModel;
 
+    @Mock
+    private ExternalCallLogger externalCallLogger;
+
     private PromptExtractionService service;
 
     @BeforeEach
     void setUp() {
         OutfitPromptProperties properties = new OutfitPromptProperties(2, 3, 200, 200, 50);
         service = new PromptExtractionService(
-                ollamaCloudChatModel, properties, new OllamaCloudProperties("https://ollama.com", "test-key", "gpt-oss:20b-cloud"));
+                ollamaCloudChatModel, properties,
+                new OllamaCloudProperties("https://ollama.com", "test-key", "gpt-oss:20b-cloud"),
+                externalCallLogger);
         lenient().when(ollamaCloudChatModel.getOptions()).thenReturn(OllamaChatOptions.builder().build());
     }
 

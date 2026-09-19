@@ -2,6 +2,7 @@ package com.fitcheck.outfit.service;
 
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.common.ai.util.EmbeddingVectorTruncator;
+import com.fitcheck.common.logging.support.ExternalCallLogger;
 import lombok.AllArgsConstructor;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.data.domain.Vector;
@@ -11,10 +12,27 @@ import org.springframework.stereotype.Service;
 @AllArgsConstructor
 public class PromptQueryEmbeddingService {
 
+    private static final String PROVIDER = "deepinfra";
+    private static final String OPERATION_EMBED = "embed-query";
+
     private final OpenAiEmbeddingModel openAiEmbeddingModel;
+    private final ExternalCallLogger externalCallLogger;
 
     public Vector embed(String text) {
-        float[] rawEmbedding = openAiEmbeddingModel.embed(text);
+        long startedAt = System.nanoTime();
+        float[] rawEmbedding;
+        try {
+            rawEmbedding = openAiEmbeddingModel.embed(text);
+        } catch (RuntimeException e) {
+            externalCallLogger.logCall(PROVIDER, OPERATION_EMBED, elapsedMs(startedAt), false);
+            throw e;
+        }
+
+        externalCallLogger.logCall(PROVIDER, OPERATION_EMBED, elapsedMs(startedAt), true);
         return Vector.of(EmbeddingVectorTruncator.truncateAndNormalize(rawEmbedding, Product.TEXT_EMBEDDING_DIMENSIONS));
+    }
+
+    private long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 }

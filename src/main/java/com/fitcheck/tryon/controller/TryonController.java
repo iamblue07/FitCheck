@@ -1,8 +1,15 @@
 package com.fitcheck.tryon.controller;
 
+import com.fitcheck.common.exception.dto.ErrorResponse;
+import com.fitcheck.common.openapi.annotation.StandardApiErrors;
 import com.fitcheck.tryon.dto.TryonStatusResponse;
 import com.fitcheck.tryon.dto.TryonSubmitRequest;
 import com.fitcheck.tryon.service.TryonRequestService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,10 +28,17 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/tryon")
 @AllArgsConstructor
+@Tag(name = "Virtual try-on", description = "Asynchronous try-on jobs rendering the caller wearing an outfit")
 public class TryonController {
 
     private final TryonRequestService tryonRequestService;
 
+    @Operation(summary = "Submit a try-on job; returns immediately with a PENDING job, poll the status endpoint for the result")
+    @StandardApiErrors
+    @ApiResponse(responseCode = "429",
+            description = "The caller's hourly try-on submission budget is exhausted",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping
     public ResponseEntity<TryonStatusResponse> submit(@AuthenticationPrincipal Jwt jwt,
                                                       @Valid @RequestBody TryonSubmitRequest request) {
@@ -33,6 +47,8 @@ public class TryonController {
                 .body(tryonRequestService.submit(userId, request.outfitId()));
     }
 
+    @Operation(summary = "Poll a try-on job; COMPLETE carries a presigned result-image URL, FAILED carries a reason")
+    @StandardApiErrors
     @GetMapping("/{requestId}")
     public ResponseEntity<TryonStatusResponse> getStatus(@AuthenticationPrincipal Jwt jwt,
                                                          @PathVariable UUID requestId) {

@@ -3,6 +3,7 @@ package com.fitcheck.catalog.service;
 import com.fitcheck.catalog.entity.Product;
 import com.fitcheck.catalog.domain.ProductEnrichmentResult;
 import com.fitcheck.common.exception.ExternalServiceException;
+import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.common.taxonomy.entity.StyleTag;
 import com.fitcheck.common.taxonomy.repository.StyleTagRepository;
 import lombok.AllArgsConstructor;
@@ -28,10 +29,14 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "ollama", matchIfMissing = true)
 public class OllamaEnrichmentService implements EnrichmentService {
 
+    private static final String PROVIDER = "ollama-local";
+    private static final String OPERATION_ENRICH = "enrich-product";
+
     private final HttpClient httpClient;
 
     private final OllamaChatModel ollamaChatModel;
     private final StyleTagRepository styleTagRepository;
+    private final ExternalCallLogger externalCallLogger;
 
     @Override
     public ProductEnrichmentResult enrich(Product product) {
@@ -40,8 +45,10 @@ public class OllamaEnrichmentService implements EnrichmentService {
                 .map(StyleTag::getName)
                 .collect(Collectors.joining(", "));
 
+        long startedAt = System.nanoTime();
+        ProductEnrichmentResult result;
         try {
-            return ChatClient.create(ollamaChatModel).prompt()
+            result = ChatClient.create(ollamaChatModel).prompt()
                     .options(OllamaChatOptions.builder().disableThinking())
                     .user(user -> user
                             .text(buildPrompt(product, allowedStyleTags))
@@ -49,9 +56,17 @@ public class OllamaEnrichmentService implements EnrichmentService {
                     .call()
                     .entity(ProductEnrichmentResult.class);
         } catch (RuntimeException e) {
+            externalCallLogger.logCall(PROVIDER, OPERATION_ENRICH, elapsedMs(startedAt), false);
             throw new ExternalServiceException(
                     "Ollama enrichment call failed for product " + product.getId() + ": " + e.getMessage());
         }
+
+        externalCallLogger.logCall(PROVIDER, OPERATION_ENRICH, elapsedMs(startedAt), true);
+        return result;
+    }
+
+    private long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     private String buildPrompt(Product product, String allowedStyleTags) {

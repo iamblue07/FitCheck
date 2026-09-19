@@ -1,4 +1,4 @@
-package com.fitcheck.common.logging;
+package com.fitcheck.common.logging.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,6 +25,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         String correlationId = resolveCorrelationId(request);
         MDC.put(MDC_KEY, correlationId);
+        response.setHeader(HEADER_NAME, correlationId);
         try {
             filterChain.doFilter(request, response);
         } finally {

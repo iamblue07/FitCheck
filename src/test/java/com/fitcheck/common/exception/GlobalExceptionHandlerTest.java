@@ -1,12 +1,16 @@
 package com.fitcheck.common.exception;
 
 import com.fitcheck.common.exception.dto.ErrorResponse;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
+import com.fitcheck.common.logging.filter.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
@@ -24,6 +28,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.lang.reflect.Method;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +40,7 @@ import static org.mockito.Mockito.when;
 class GlobalExceptionHandlerTest {
 
     private static final String REQUEST_URI = "/api/v1/test";
+    private static final Instant FIXED_INSTANT = Instant.parse("2026-01-01T12:00:00Z");
 
     @Mock
     private HttpServletRequest request;
@@ -41,7 +49,13 @@ class GlobalExceptionHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new GlobalExceptionHandler();
+        handler = new GlobalExceptionHandler(
+                new ErrorResponseFactory(Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC)));
+    }
+
+    @AfterEach
+    void clearMdc() {
+        MDC.remove(CorrelationIdFilter.MDC_KEY);
     }
 
     @Test
@@ -58,7 +72,8 @@ class GlobalExceptionHandlerTest {
         assertThat(body.error()).isEqualTo("Not Found");
         assertThat(body.message()).isEqualTo("User not found");
         assertThat(body.path()).isEqualTo(REQUEST_URI);
-        assertThat(body.timestamp()).isNotNull();
+        assertThat(body.timestamp()).isEqualTo(FIXED_INSTANT);
+        assertThat(body.fieldErrors()).isNull();
     }
 
     @Test
@@ -103,7 +118,29 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleValidationException_returns400WithFieldErrors() throws NoSuchMethodException {
+    void handleAppException_correlationIdInMdc_isCopiedOntoTheResponseBody() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+        String correlationId = UUID.randomUUID().toString();
+        MDC.put(CorrelationIdFilter.MDC_KEY, correlationId);
+
+        ResponseEntity<ErrorResponse> response =
+                handler.handleAppException(new BadRequestException("bad"), request);
+
+        assertThat(response.getBody().correlationId()).isEqualTo(correlationId);
+    }
+
+    @Test
+    void handleAppException_noCorrelationIdInMdc_leavesTheFieldNullWithoutFailing() {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+
+        ResponseEntity<ErrorResponse> response =
+                handler.handleAppException(new BadRequestException("bad"), request);
+
+        assertThat(response.getBody().correlationId()).isNull();
+    }
+
+    @Test
+    void handleValidationException_returns400WithFieldErrorsMapAndSummaryMessage() throws NoSuchMethodException {
         when(request.getRequestURI()).thenReturn(REQUEST_URI);
 
         Method dummyMethod = getClass().getDeclaredMethod("dummyValidationTarget", String.class);
@@ -116,8 +153,46 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ErrorResponse> response = handler.handleValidation(ex, request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().message())
-                .isEqualTo("email: must be a well-formed email address, password: size must be between 8 and 2147483647");
+        ErrorResponse body = response.getBody();
+        assertThat(body.message()).isEqualTo("Request validation failed");
+        assertThat(body.fieldErrors())
+                .containsEntry("email", "must be a well-formed email address")
+                .containsEntry("password", "size must be between 8 and 2147483647")
+                .hasSize(2);
+    }
+
+    @Test
+    void handleValidationException_twoViolationsOnSameField_areMergedRatherThanThrowing() throws NoSuchMethodException {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+
+        Method dummyMethod = getClass().getDeclaredMethod("dummyValidationTarget", String.class);
+        MethodParameter methodParameter = new MethodParameter(dummyMethod, 0);
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "registerRequest");
+        bindingResult.addError(new FieldError("registerRequest", "password", "must not be blank"));
+        bindingResult.addError(new FieldError("registerRequest", "password", "size must be between 8 and 64"));
+        MethodArgumentNotValidException ex = new MethodArgumentNotValidException(methodParameter, bindingResult);
+
+        ResponseEntity<ErrorResponse> response = handler.handleValidation(ex, request);
+
+        assertThat(response.getBody().fieldErrors()).hasSize(1);
+        assertThat(response.getBody().fieldErrors().get("password"))
+                .contains("must not be blank")
+                .contains("size must be between 8 and 64");
+    }
+
+    @Test
+    void handleValidationException_nullDefaultMessage_fallsBackWithoutNpe() throws NoSuchMethodException {
+        when(request.getRequestURI()).thenReturn(REQUEST_URI);
+
+        Method dummyMethod = getClass().getDeclaredMethod("dummyValidationTarget", String.class);
+        MethodParameter methodParameter = new MethodParameter(dummyMethod, 0);
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "registerRequest");
+        bindingResult.addError(new FieldError("registerRequest", "email", null));
+        MethodArgumentNotValidException ex = new MethodArgumentNotValidException(methodParameter, bindingResult);
+
+        ResponseEntity<ErrorResponse> response = handler.handleValidation(ex, request);
+
+        assertThat(response.getBody().fieldErrors()).containsEntry("email", "is invalid");
     }
 
     @Test

@@ -1,6 +1,8 @@
 package com.fitcheck.outfit.controller;
 
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import com.fitcheck.common.security.config.JwtConfig;
 import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
 import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
@@ -29,7 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(PromptController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
+        ErrorResponseFactory.class, CommonBeansConfig.class})
 @TestPropertySource(properties = {
         "jwt.secret=" + PromptControllerTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",

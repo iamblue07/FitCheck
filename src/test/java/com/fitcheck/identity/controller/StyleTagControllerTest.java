@@ -1,11 +1,14 @@
 package com.fitcheck.identity.controller;
 
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import com.fitcheck.identity.dto.StyleTagResponse;
 import com.fitcheck.identity.service.StyleTagService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -19,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(StyleTagController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import({ErrorResponseFactory.class, CommonBeansConfig.class})
 class StyleTagControllerTest {
 
     @Autowired

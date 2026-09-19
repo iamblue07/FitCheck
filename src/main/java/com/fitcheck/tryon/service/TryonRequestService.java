@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -32,6 +34,9 @@ import java.util.UUID;
 public class TryonRequestService {
 
     private static final String RATE_LIMIT_OPERATION_KEY = "tryon-submit";
+
+    private static final Set<TryonRequestStatus> IN_FLIGHT_STATUSES =
+            Set.of(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
 
     private final OutfitItemQueryService outfitItemQueryService;
     private final InMemoryRateLimiter inMemoryRateLimiter;
@@ -48,8 +53,17 @@ public class TryonRequestService {
     public TryonStatusResponse submit(UUID userId, UUID outfitId) {
         List<Product> orderedProducts = outfitItemQueryService.findProductsForTryon(outfitId);
 
+        Optional<TryonRequest> inFlight = tryonRequestRepository
+                .findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(userId, outfitId, IN_FLIGHT_STATUSES);
+        if (inFlight.isPresent()) {
+            TryonRequest existing = inFlight.get();
+            log.info("Tryon submit for user {} outfit {} returned in-flight request {} instead of starting a new one",
+                    userId, outfitId, existing.getId());
+            return new TryonStatusResponse(existing.getId(), existing.getStatus(), null, null);
+        }
+
         boolean consumed = inMemoryRateLimiter.tryConsume(
-                userId, RATE_LIMIT_OPERATION_KEY, properties.rateLimitPerHour(), Duration.ofHours(1));
+                userId.toString(), RATE_LIMIT_OPERATION_KEY, properties.rateLimitPerHour(), Duration.ofHours(1));
         if (!consumed) {
             throw new RateLimitExceededException("Rate limit exceeded for this operation - try again later");
         }

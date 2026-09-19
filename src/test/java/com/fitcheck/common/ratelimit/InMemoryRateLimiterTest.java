@@ -18,69 +18,78 @@ class InMemoryRateLimiterTest {
 
     @Test
     void tryConsume_upToLimitRequestsSucceed_thenTheNextOneFails() {
-        UUID userId = UUID.randomUUID();
+        String subject = UUID.randomUUID().toString();
         String operationKey = "outfit-prompt-generation";
 
         for (int i = 0; i < 200; i++) {
-            assertThat(rateLimiter.tryConsume(userId, operationKey, 200, Duration.ofHours(1))).isTrue();
+            assertThat(rateLimiter.tryConsume(subject, operationKey, 200, Duration.ofHours(1))).isTrue();
         }
 
-        assertThat(rateLimiter.tryConsume(userId, operationKey, 200, Duration.ofHours(1))).isFalse();
+        assertThat(rateLimiter.tryConsume(subject, operationKey, 200, Duration.ofHours(1))).isFalse();
     }
 
     @Test
     void tryConsume_differentOperationKeys_trackedIndependently() {
-        UUID userId = UUID.randomUUID();
+        String subject = UUID.randomUUID().toString();
 
         for (int i = 0; i < 200; i++) {
-            assertThat(rateLimiter.tryConsume(userId, "generation", 200, Duration.ofHours(1))).isTrue();
+            assertThat(rateLimiter.tryConsume(subject, "generation", 200, Duration.ofHours(1))).isTrue();
         }
-        assertThat(rateLimiter.tryConsume(userId, "generation", 200, Duration.ofHours(1))).isFalse();
+        assertThat(rateLimiter.tryConsume(subject, "generation", 200, Duration.ofHours(1))).isFalse();
 
-        assertThat(rateLimiter.tryConsume(userId, "refinement", 200, Duration.ofHours(1))).isTrue();
+        assertThat(rateLimiter.tryConsume(subject, "refinement", 200, Duration.ofHours(1))).isTrue();
     }
 
     @Test
-    void tryConsume_differentUsers_trackedIndependently() {
-        UUID userA = UUID.randomUUID();
-        UUID userB = UUID.randomUUID();
+    void tryConsume_differentSubjects_trackedIndependently() {
+        String subjectA = UUID.randomUUID().toString();
+        String subjectB = UUID.randomUUID().toString();
         String operationKey = "outfit-prompt-generation";
 
         for (int i = 0; i < 200; i++) {
-            assertThat(rateLimiter.tryConsume(userA, operationKey, 200, Duration.ofHours(1))).isTrue();
+            assertThat(rateLimiter.tryConsume(subjectA, operationKey, 200, Duration.ofHours(1))).isTrue();
         }
-        assertThat(rateLimiter.tryConsume(userA, operationKey, 200, Duration.ofHours(1))).isFalse();
+        assertThat(rateLimiter.tryConsume(subjectA, operationKey, 200, Duration.ofHours(1))).isFalse();
 
-        assertThat(rateLimiter.tryConsume(userB, operationKey, 200, Duration.ofHours(1))).isTrue();
+        assertThat(rateLimiter.tryConsume(subjectB, operationKey, 200, Duration.ofHours(1))).isTrue();
+    }
+
+    @Test
+    void tryConsume_nonUuidSubjects_areValidKeysTrackedIndependently() {
+        assertThat(rateLimiter.tryConsume("203.0.113.7", "auth-ip", 1, Duration.ofMinutes(15))).isTrue();
+        assertThat(rateLimiter.tryConsume("203.0.113.7", "auth-ip", 1, Duration.ofMinutes(15))).isFalse();
+
+        assertThat(rateLimiter.tryConsume("jane@example.com", "auth-email", 1, Duration.ofMinutes(15))).isTrue();
+        assertThat(rateLimiter.tryConsume("203.0.113.8", "auth-ip", 1, Duration.ofMinutes(15))).isTrue();
     }
 
     @Test
     void tryConsume_afterWindowExpires_resetsTheCount() {
-        UUID userId = UUID.randomUUID();
+        String subject = UUID.randomUUID().toString();
         String operationKey = "outfit-prompt-generation";
 
-        assertThat(rateLimiter.tryConsume(userId, operationKey, 1, Duration.ofHours(1))).isTrue();
-        assertThat(rateLimiter.tryConsume(userId, operationKey, 1, Duration.ofHours(1))).isFalse();
+        assertThat(rateLimiter.tryConsume(subject, operationKey, 1, Duration.ofHours(1))).isTrue();
+        assertThat(rateLimiter.tryConsume(subject, operationKey, 1, Duration.ofHours(1))).isFalse();
 
         clock.advance(Duration.ofHours(1).plusSeconds(1));
 
-        assertThat(rateLimiter.tryConsume(userId, operationKey, 1, Duration.ofHours(1))).isTrue();
+        assertThat(rateLimiter.tryConsume(subject, operationKey, 1, Duration.ofHours(1))).isTrue();
     }
 
     @Test
-    void evictExpiredWindows_doesNotDisruptAnActiveUsersWindow() {
-        UUID staleUser = UUID.randomUUID();
-        UUID activeUser = UUID.randomUUID();
+    void evictExpiredWindows_doesNotDisruptAnActiveSubjectsWindow() {
+        String staleSubject = UUID.randomUUID().toString();
+        String activeSubject = UUID.randomUUID().toString();
         String operationKey = "outfit-prompt-generation";
 
-        rateLimiter.tryConsume(staleUser, operationKey, 1, Duration.ofMinutes(1));
+        rateLimiter.tryConsume(staleSubject, operationKey, 1, Duration.ofMinutes(1));
         clock.advance(Duration.ofMinutes(2));
-        rateLimiter.tryConsume(activeUser, operationKey, 1, Duration.ofHours(1));
+        rateLimiter.tryConsume(activeSubject, operationKey, 1, Duration.ofHours(1));
 
         rateLimiter.evictExpiredWindows();
 
-        assertThat(rateLimiter.tryConsume(activeUser, operationKey, 1, Duration.ofHours(1))).isFalse();
-        assertThat(rateLimiter.tryConsume(staleUser, operationKey, 1, Duration.ofMinutes(1))).isTrue();
+        assertThat(rateLimiter.tryConsume(activeSubject, operationKey, 1, Duration.ofHours(1))).isFalse();
+        assertThat(rateLimiter.tryConsume(staleSubject, operationKey, 1, Duration.ofMinutes(1))).isTrue();
     }
 
     private static final class MutableClock extends Clock {

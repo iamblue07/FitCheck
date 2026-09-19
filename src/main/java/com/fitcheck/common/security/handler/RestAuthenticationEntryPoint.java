@@ -1,6 +1,7 @@
 package com.fitcheck.common.security.handler;
 
 import com.fitcheck.common.exception.dto.ErrorResponse;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 
 @Component
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
@@ -21,9 +21,11 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
     private static final Logger log = LoggerFactory.getLogger(RestAuthenticationEntryPoint.class);
 
     private final JsonMapper jsonMapper;
+    private final ErrorResponseFactory errorResponseFactory;
 
-    public RestAuthenticationEntryPoint(JsonMapper jsonMapper) {
+    public RestAuthenticationEntryPoint(JsonMapper jsonMapper, ErrorResponseFactory errorResponseFactory) {
         this.jsonMapper = jsonMapper;
+        this.errorResponseFactory = errorResponseFactory;
     }
 
     @Override
@@ -31,13 +33,10 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
                          AuthenticationException authException) throws IOException {
         log.warn("Unauthenticated request rejected: {} {}", request.getMethod(), request.getRequestURI());
 
-        ErrorResponse body = new ErrorResponse(
-                LocalDateTime.now(),
-                HttpStatus.UNAUTHORIZED.value(),
-                HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+        ErrorResponse body = errorResponseFactory.build(
+                HttpStatus.UNAUTHORIZED,
                 "Authentication is required to access this resource",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
 
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

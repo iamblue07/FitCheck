@@ -1,10 +1,13 @@
 package com.fitcheck.feed.properties;
 
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
+@Validated
 @ConfigurationProperties(prefix = "feed")
 public record FeedProperties(
-        int pageSize,
-        int refillThreshold
+        @Positive int pageSize,
+        @Positive int refillThreshold
 ) {
 }

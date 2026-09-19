@@ -1,5 +1,8 @@
 package com.fitcheck.identity.controller;
 
+import com.fitcheck.common.config.CommonBeansConfig;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
+import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
 import com.fitcheck.common.security.config.JwtConfig;
 import com.fitcheck.common.security.handler.RestAccessDeniedHandler;
 import com.fitcheck.common.security.handler.RestAuthenticationEntryPoint;
@@ -43,7 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProfileController.class)
-@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
+        ErrorResponseFactory.class, CommonBeansConfig.class})
 @TestPropertySource(properties = {
         "jwt.secret=" + ProfileControllerSecurityTest.TEST_JWT_SECRET,
         "jwt.access-expiration=900000",
@@ -52,6 +56,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ProfileControllerSecurityTest {
 
     static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
+
+    @MockitoBean
+    private InMemoryRateLimiter inMemoryRateLimiter;
 
     @Autowired
     private MockMvc mockMvc;
@@ -106,6 +113,8 @@ class ProfileControllerSecurityTest {
                 .expiresAt(now.plus(Duration.ofMinutes(15)))
                 .claim("email", "test@example.com")
                 .claim("role", "USER")
+                .issuer("https://fitcheck.local")
+                .audience(List.of("fitcheck-api"))
                 .build();
         JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
 

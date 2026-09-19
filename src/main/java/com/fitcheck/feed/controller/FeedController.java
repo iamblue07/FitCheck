@@ -1,11 +1,14 @@
 package com.fitcheck.feed.controller;
 
+import com.fitcheck.common.openapi.annotation.StandardApiErrors;
 import com.fitcheck.feed.dto.FeedItemResponse;
 import com.fitcheck.feed.dto.FeedPage;
 import com.fitcheck.feed.dto.FeedResponse;
 import com.fitcheck.feed.service.FeedGenerationService;
 import com.fitcheck.feed.properties.FeedProperties;
 import com.fitcheck.feed.support.FeedResponseAssembler;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,12 +24,15 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/feed")
 @AllArgsConstructor
+@Tag(name = "Feed", description = "The caller's personalised, never-repeating outfit feed")
 public class FeedController {
 
     private final FeedGenerationService feedGenerationService;
     private final FeedResponseAssembler feedResponseAssembler;
     private final FeedProperties feedProperties;
 
+    @Operation(summary = "Get one page of the feed; pass the returned nextCursor to fetch the following page")
+    @StandardApiErrors
     @GetMapping
     public ResponseEntity<FeedResponse> getFeed(@AuthenticationPrincipal Jwt jwt,
                                                 @RequestParam(required = false) String cursor) {

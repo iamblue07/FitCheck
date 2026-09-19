@@ -1,13 +1,16 @@
 package com.fitcheck.common.exception;
 
 import com.fitcheck.common.exception.dto.ErrorResponse;
+import com.fitcheck.common.exception.support.ErrorResponseFactory;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -16,14 +19,17 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.time.LocalDateTime;
-import java.util.stream.Collectors;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 
 @ControllerAdvice
+@AllArgsConstructor
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    private final ErrorResponseFactory errorResponseFactory;
 
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ErrorResponse> handleAppException(AppException ex, HttpServletRequest request) {
@@ -32,10 +38,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
-                .collect(Collectors.joining(", "));
-        return buildResponse(HttpStatus.BAD_REQUEST, message, request);
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+            String message = fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "is invalid";
+            fieldErrors.merge(fieldError.getField(), message, (first, second) -> first + "; " + second);
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponseFactory.build(
+                HttpStatus.BAD_REQUEST, "Request validation failed", request.getRequestURI(), fieldErrors));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -80,13 +89,7 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String message, HttpServletRequest request) {
-        ErrorResponse body = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                message,
-                request.getRequestURI()
-        );
-        return ResponseEntity.status(status).body(body);
+        return ResponseEntity.status(status).body(
+                errorResponseFactory.build(status, message, request.getRequestURI()));
     }
 }

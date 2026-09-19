@@ -1,6 +1,6 @@
 package com.fitcheck.tryon.config;
 
-import com.fitcheck.common.logging.MdcTaskDecorator;
+import com.fitcheck.common.logging.support.MdcTaskDecorator;
 import com.fitcheck.tryon.properties.TryonExecutorProperties;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

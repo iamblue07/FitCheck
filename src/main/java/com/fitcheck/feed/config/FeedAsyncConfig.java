@@ -1,6 +1,6 @@
 package com.fitcheck.feed.config;
 
-import com.fitcheck.common.logging.MdcTaskDecorator;
+import com.fitcheck.common.logging.support.MdcTaskDecorator;
 import com.fitcheck.feed.properties.FeedExecutorProperties;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

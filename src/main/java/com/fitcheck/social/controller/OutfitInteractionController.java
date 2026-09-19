@@ -1,9 +1,12 @@
 package com.fitcheck.social.controller;
 
+import com.fitcheck.common.openapi.annotation.StandardApiErrors;
 import com.fitcheck.social.dto.InteractionStateResponse;
 import com.fitcheck.social.dto.SavedOutfitsResponse;
 import com.fitcheck.social.enums.InteractionType;
 import com.fitcheck.social.service.OutfitInteractionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +27,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/outfits")
 @AllArgsConstructor
+@Tag(name = "Social interactions", description = "Likes and saves on outfits, and the caller's saved list")
 public class OutfitInteractionController {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -31,6 +35,8 @@ public class OutfitInteractionController {
 
     private final OutfitInteractionService outfitInteractionService;
 
+    @Operation(summary = "Like an outfit; idempotent, liking an already-liked outfit is a no-op")
+    @StandardApiErrors
     @PostMapping("/{outfitId}/like")
     public ResponseEntity<InteractionStateResponse> like(@AuthenticationPrincipal Jwt jwt,
                                                          @PathVariable UUID outfitId) {
@@ -38,6 +44,8 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.activate(userId, outfitId, InteractionType.LIKE));
     }
 
+    @Operation(summary = "Remove a like; idempotent, unliking a not-liked outfit is a no-op")
+    @StandardApiErrors
     @DeleteMapping("/{outfitId}/like")
     public ResponseEntity<InteractionStateResponse> unlike(@AuthenticationPrincipal Jwt jwt,
                                                            @PathVariable UUID outfitId) {
@@ -45,6 +53,8 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.deactivate(userId, outfitId, InteractionType.LIKE));
     }
 
+    @Operation(summary = "Save an outfit; idempotent, saving an already-saved outfit is a no-op")
+    @StandardApiErrors
     @PostMapping("/{outfitId}/save")
     public ResponseEntity<InteractionStateResponse> save(@AuthenticationPrincipal Jwt jwt,
                                                          @PathVariable UUID outfitId) {
@@ -52,6 +62,8 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.activate(userId, outfitId, InteractionType.SAVE));
     }
 
+    @Operation(summary = "Remove a save; idempotent, unsaving a not-saved outfit is a no-op")
+    @StandardApiErrors
     @DeleteMapping("/{outfitId}/save")
     public ResponseEntity<InteractionStateResponse> unsave(@AuthenticationPrincipal Jwt jwt,
                                                            @PathVariable UUID outfitId) {
@@ -59,6 +71,8 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.deactivate(userId, outfitId, InteractionType.SAVE));
     }
 
+    @Operation(summary = "List the caller's saved outfits, most recently saved first; size is clamped to 100")
+    @StandardApiErrors
     @GetMapping("/saved")
     public ResponseEntity<SavedOutfitsResponse> listSaved(@AuthenticationPrincipal Jwt jwt,
                                                           @RequestParam(defaultValue = "0") int page,
@@ -68,6 +82,8 @@ public class OutfitInteractionController {
         return ResponseEntity.ok(outfitInteractionService.listSaved(userId, pageable));
     }
 
+    @Operation(summary = "Get every outfit id the caller has liked or saved, so a client can reconcile heart and bookmark state locally")
+    @StandardApiErrors
     @GetMapping("/interactions/mine")
     public ResponseEntity<Set<UUID>> listInteractedOutfitIds(@AuthenticationPrincipal Jwt jwt,
                                                              @RequestParam InteractionType type) {
