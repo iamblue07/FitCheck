@@ -1,0 +1,17 @@
+package com.sewlect.outfit.repository;
+
+import com.sewlect.outfit.entity.Outfit;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface OutfitRepository extends JpaRepository<Outfit, UUID> {
+
+    Optional<Outfit> findByItemSetHash(String itemSetHash);
+
+    List<Outfit> findByItemSetHashIn(Collection<String> itemSetHashes);
+
+}

@@ -1,10 +1,10 @@
-# FitCheck
+# Sewlect
 
 AI-powered outfit discovery and virtual try-on. Master's thesis project — Spring Boot backend, Flutter frontend to follow.
 
 ## Overview
 
-FitCheck recommends outfits assembled from a real product catalog, matched to a user's profile and budget, and lets them try any outfit on virtually before deciding whether they'd actually wear it. Recommendations come from two directions: an algorithmic feed that learns a user's taste over time, and a free-text prompt that generates outfits on demand — either matched to the user's own profile or, if they opt out, matched to the prompt alone with gender and budget inferred straight from the text (useful for "find something for my sister," not just "find something for me").
+Sewlect recommends outfits assembled from a real product catalog, matched to a user's profile and budget, and lets them try any outfit on virtually before deciding whether they'd actually wear it. Recommendations come from two directions: an algorithmic feed that learns a user's taste over time, and a free-text prompt that generates outfits on demand — either matched to the user's own profile or, if they opt out, matched to the prompt alone with gender and budget inferred straight from the text (useful for "find something for my sister," not just "find something for me").
 
 ## Features
 
