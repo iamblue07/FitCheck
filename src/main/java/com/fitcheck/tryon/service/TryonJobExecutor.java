@@ -10,6 +10,7 @@ import com.fitcheck.identity.enums.PhotoType;
 import com.fitcheck.identity.service.PhotoService;
 import com.fitcheck.tryon.entity.TryonRequest;
 import com.fitcheck.tryon.entity.TryonRequestItem;
+import com.fitcheck.tryon.properties.FashnModelProperties;
 import com.fitcheck.tryon.properties.TryonProperties;
 import com.fitcheck.tryon.repository.TryonRequestItemRepository;
 import com.fitcheck.tryon.repository.TryonRequestRepository;
@@ -34,7 +35,7 @@ import java.util.function.Supplier;
 @Slf4j
 @Service
 @AllArgsConstructor
-@EnableConfigurationProperties(TryonProperties.class)
+@EnableConfigurationProperties({TryonProperties.class, FashnModelProperties.class})
 public class TryonJobExecutor {
 
     private final TryonRequestRepository tryonRequestRepository;
@@ -45,6 +46,7 @@ public class TryonJobExecutor {
     private final PhotoService photoService;
     private final StorageService storageService;
     private final TryonProperties properties;
+    private final FashnModelProperties modelProperties;
     private final HttpClient httpClient;
     private final Clock clock;
 
@@ -87,12 +89,9 @@ public class TryonJobExecutor {
             tryonPersistenceService.markItemComplete(item.getId());
         }
 
-        String resultImageUrl = currentImageUrl != null
-                ? currentImageUrl
-                : presignedFrontPhotoUrl(frontPhotoStorageKey);
-        byte[] resultBytes = downloadBytes(resultImageUrl);
+        byte[] resultBytes = downloadBytes(currentImageUrl);
         String storageKey = StorageKeys.tryonResultKey(tryonRequestId);
-        storageService.store(storageKey, resultBytes, "image/" + properties.fashnOutputFormat());
+        storageService.store(storageKey, resultBytes, "image/" + modelProperties.outputFormat());
         tryonPersistenceService.markRequestComplete(tryonRequestId, storageKey);
     }
 

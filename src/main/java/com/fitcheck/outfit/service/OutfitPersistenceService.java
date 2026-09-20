@@ -7,6 +7,7 @@ import com.fitcheck.outfit.entity.OutfitItem;
 import com.fitcheck.outfit.enums.OutfitSource;
 import com.fitcheck.outfit.repository.OutfitItemRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;
+import com.fitcheck.outfit.support.OutfitItemAssembler;
 import lombok.AllArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class OutfitPersistenceService {
     private final OutfitRepository outfitRepository;
     private final OutfitItemRepository outfitItemRepository;
     private final OutfitInsertService outfitInsertService;
+    private final OutfitItemAssembler outfitItemAssembler;
 
     public Optional<Outfit> findExisting(String itemSetHash) {
         return outfitRepository.findByItemSetHash(itemSetHash);
@@ -33,15 +35,7 @@ public class OutfitPersistenceService {
     @Transactional
     public Outfit saveNew(List<Product> selected, CompatibilityScoreBreakdown breakdown, String itemSetHash,
                           OutfitSource source) {
-        Outfit outfit = outfitInsertService.insert(breakdown, itemSetHash, source);
-
-        List<OutfitItem> items = new ArrayList<>();
-        for (Product product : selected) {
-            items.add(buildOutfitItem(outfit, product));
-        }
-        outfitItemRepository.saveAll(items);
-
-        return outfit;
+        return outfitInsertService.insert(selected, breakdown, itemSetHash, source);
     }
 
     @Transactional
@@ -76,16 +70,8 @@ public class OutfitPersistenceService {
         for (PersistenceCandidate candidate : candidates) {
             Outfit outfit = resolvedByHash.get(candidate.itemSetHash());
             if (outfit == null) {
-                try {
-                    outfit = outfitInsertService.insert(
-                            candidate.breakdown(), candidate.itemSetHash(), candidate.source());
-                    newItems.addAll(buildOutfitItems(outfit, candidate.products()));
-                } catch (DataIntegrityViolationException e) {
-                    outfit = findExisting(candidate.itemSetHash())
-                            .orElseThrow(() -> new IllegalStateException(
-                                    "Outfit insert failed on unique constraint but no existing row found for hash "
-                                            + candidate.itemSetHash(), e));
-                }
+                outfit = saveNewOutfitRow(candidate);
+                newItems.addAll(outfitItemAssembler.toOutfitItems(outfit, candidate.products()));
                 resolvedByHash.put(candidate.itemSetHash(), outfit);
             }
             results.add(outfit);
@@ -96,20 +82,17 @@ public class OutfitPersistenceService {
         return results;
     }
 
-    private List<OutfitItem> buildOutfitItems(Outfit outfit, List<Product> products) {
-        List<OutfitItem> items = new ArrayList<>();
-        for (Product product : products) {
-            items.add(buildOutfitItem(outfit, product));
-        }
-        return items;
-    }
-
-    private OutfitItem buildOutfitItem(Outfit outfit, Product product) {
-        return OutfitItem.builder()
-                .outfit(outfit)
-                .product(product)
-                .slot(product.getGarmentRole())
+    private Outfit saveNewOutfitRow(PersistenceCandidate candidate) {
+        Outfit outfit = Outfit.builder()
+                .source(candidate.source())
+                .compatibilityScore(candidate.breakdown().finalScore())
+                .colorScore(candidate.breakdown().colorScore())
+                .layeringScore(candidate.breakdown().layeringScore())
+                .structuredScore(candidate.breakdown().structuredScore())
+                .embeddingScore(candidate.breakdown().embeddingScore())
+                .itemSetHash(candidate.itemSetHash())
                 .build();
+        return outfitRepository.saveAndFlush(outfit);
     }
 
     public record PersistenceCandidate(List<Product> products, CompatibilityScoreBreakdown breakdown,

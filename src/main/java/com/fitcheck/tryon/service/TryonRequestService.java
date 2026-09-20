@@ -1,6 +1,7 @@
 package com.fitcheck.tryon.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.common.exception.BadRequestException;
 import com.fitcheck.common.exception.RateLimitExceededException;
 import com.fitcheck.common.exception.ResourceNotFoundException;
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
@@ -23,6 +24,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -49,6 +51,7 @@ public class TryonRequestService {
     private final PhotoService photoService;
     private final StorageService storageService;
     private final TryonProperties properties;
+    private final Clock clock;
     private final TryonJobExecutor tryonJobExecutor;
 
     @Qualifier("tryonExecutor")
@@ -56,14 +59,22 @@ public class TryonRequestService {
 
     public TryonStatusResponse submit(UUID userId, UUID outfitId) {
         List<Product> orderedProducts = outfitItemQueryService.findProductsForTryon(outfitId);
+        if (orderedProducts.isEmpty()) {
+            throw new BadRequestException("Outfit " + outfitId + " has no try-on eligible items");
+        }
 
         Optional<TryonRequest> inFlight = tryonRequestRepository
                 .findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(userId, outfitId, IN_FLIGHT_STATUSES);
         if (inFlight.isPresent()) {
             TryonRequest existing = inFlight.get();
-            log.info("Tryon submit for user {} outfit {} returned in-flight request {} instead of starting a new one",
-                    userId, outfitId, existing.getId());
-            return new TryonStatusResponse(existing.getId(), existing.getStatus(), null, null);
+            if (isStale(existing)) {
+                log.warn("Tryon submit for user {} outfit {} ignored abandoned in-flight request {} last updated at {}",
+                        userId, outfitId, existing.getId(), existing.getUpdatedAt());
+            } else {
+                log.info("Tryon submit for user {} outfit {} returned in-flight request {} instead of starting a new one",
+                        userId, outfitId, existing.getId());
+                return new TryonStatusResponse(existing.getId(), existing.getStatus(), null, null);
+            }
         }
 
         Optional<TryonRequest> reusable = findReusableResult(userId, outfitId);
@@ -114,6 +125,15 @@ public class TryonRequestService {
 
         return new TryonStatusResponse(
                 tryonRequest.getId(), tryonRequest.getStatus(), resultImageUrl, tryonRequest.getErrorMessage());
+    }
+
+    private boolean isStale(TryonRequest tryonRequest) {
+        if (tryonRequest.getUpdatedAt() == null) {
+            return true;
+        }
+        LocalDateTime cutoff = LocalDateTime.now(clock)
+                .minus(Duration.ofMillis(properties.staleInFlightThresholdMs()));
+        return tryonRequest.getUpdatedAt().isBefore(cutoff);
     }
 
     private Optional<TryonRequest> findReusableResult(UUID userId, UUID outfitId) {

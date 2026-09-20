@@ -1,6 +1,7 @@
 package com.fitcheck.tryon.service;
 
 import com.fitcheck.catalog.entity.Product;
+import com.fitcheck.common.exception.BadRequestException;
 import com.fitcheck.common.exception.RateLimitExceededException;
 import com.fitcheck.common.exception.ResourceNotFoundException;
 import com.fitcheck.common.ratelimit.InMemoryRateLimiter;
@@ -25,8 +26,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.AsyncTaskExecutor;
 
 import java.net.URI;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -52,6 +56,10 @@ class TryonRequestServiceTest {
 
     private static final Set<TryonRequestStatus> IN_FLIGHT =
             Set.of(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
+
+    private static final Instant FIXED_INSTANT = Instant.parse("2026-09-04T12:00:00Z");
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 4, 12, 0);
+    private static final long STALE_THRESHOLD_MS = 1200000L;
 
     @Mock
     private OutfitItemQueryService outfitItemQueryService;
@@ -80,11 +88,11 @@ class TryonRequestServiceTest {
 
     @BeforeEach
     void setUp() {
-        properties = new TryonProperties(20, 1, 2000, 3000, 180000, 900000,
-                "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
+        properties = new TryonProperties(20, 1, 2000, 3000, 180000, 900000, STALE_THRESHOLD_MS, 300000);
         service = new TryonRequestService(
                 outfitItemQueryService, inMemoryRateLimiter, tryonPersistenceService, tryonRequestRepository,
-                userReferenceQueryService, photoService, storageService, properties, tryonJobExecutor, tryonExecutor);
+                userReferenceQueryService, photoService, storageService, properties,
+                Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC), tryonJobExecutor, tryonExecutor);
 
         userId = UUID.randomUUID();
         outfitId = UUID.randomUUID();
@@ -113,12 +121,28 @@ class TryonRequestServiceTest {
     }
 
     @Test
+    void submit_outfitHasNoTryonEligibleItems_throwsBadRequestAndNeverCreatesARequestRow() {
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.submit(userId, outfitId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining(outfitId.toString());
+
+        verifyNoInteractions(tryonRequestRepository);
+        verifyNoInteractions(inMemoryRateLimiter);
+        verifyNoInteractions(tryonPersistenceService);
+        verifyNoInteractions(tryonExecutor);
+    }
+
+    @Test
     void submit_requestAlreadyInFlightForSameOutfit_returnsItWithoutConsumingRateLimitOrQueueingAnother() {
         UUID inFlightId = UUID.randomUUID();
         Product product = Product.builder().id(UUID.randomUUID()).build();
         when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
         TryonRequest inFlight = TryonRequest.builder()
-                .id(inFlightId).status(TryonRequestStatus.PROCESSING).build();
+                .id(inFlightId).status(TryonRequestStatus.PROCESSING)
+                .updatedAt(NOW.minusMinutes(2))
+                .build();
         when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(
                 userId, outfitId, IN_FLIGHT)).thenReturn(Optional.of(inFlight));
 
@@ -129,6 +153,45 @@ class TryonRequestServiceTest {
         verifyNoInteractions(inMemoryRateLimiter);
         verifyNoInteractions(tryonExecutor);
         verify(tryonPersistenceService, never()).createPending(any(), any(), any());
+    }
+
+    // ---------- submit: stale in-flight rows no longer wedge the outfit ----------
+
+    @Test
+    void submit_inFlightRequestOlderThanTheStaleThreshold_isIgnoredAndAFreshJobStarts() {
+        Product product = Product.builder().id(UUID.randomUUID()).build();
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
+        TryonRequest wedged = TryonRequest.builder()
+                .id(UUID.randomUUID()).status(TryonRequestStatus.PROCESSING)
+                .updatedAt(NOW.minusMinutes(25))
+                .build();
+        when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(
+                userId, outfitId, IN_FLIGHT)).thenReturn(Optional.of(wedged));
+        when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
+        UUID newRequestId = stubHappyPathAfterRateLimit(product);
+
+        TryonStatusResponse response = service.submit(userId, outfitId);
+
+        assertThat(response.id()).isEqualTo(newRequestId);
+        assertThat(response.status()).isEqualTo(TryonRequestStatus.PENDING);
+        verify(tryonExecutor).submit(any(Runnable.class));
+    }
+
+    @Test
+    void submit_inFlightRequestWithNoAuditTimestamp_isTreatedAsStaleRatherThanWedgingTheOutfitForever() {
+        Product product = Product.builder().id(UUID.randomUUID()).build();
+        when(outfitItemQueryService.findProductsForTryon(outfitId)).thenReturn(List.of(product));
+        TryonRequest wedged = TryonRequest.builder()
+                .id(UUID.randomUUID()).status(TryonRequestStatus.PENDING).build();
+        when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusInOrderByCreatedAtDesc(
+                userId, outfitId, IN_FLIGHT)).thenReturn(Optional.of(wedged));
+        when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
+        UUID newRequestId = stubHappyPathAfterRateLimit(product);
+
+        TryonStatusResponse response = service.submit(userId, outfitId);
+
+        assertThat(response.id()).isEqualTo(newRequestId);
+        verify(tryonExecutor).submit(any(Runnable.class));
     }
 
     // ---------- submit: reuse of a valid COMPLETE result ----------
@@ -144,7 +207,7 @@ class TryonRequestServiceTest {
         TryonRequest completed = TryonRequest.builder()
                 .id(completedId).user(user).status(TryonRequestStatus.COMPLETE)
                 .resultImageStorageKey(storageKey)
-                .completedAt(LocalDateTime.of(2026, 9, 4, 12, 0))
+                .completedAt(LocalDateTime.of(2026, 9, 4, 11, 30))
                 .build();
         when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
                 userId, outfitId, TryonRequestStatus.COMPLETE)).thenReturn(Optional.of(completed));
@@ -179,7 +242,7 @@ class TryonRequestServiceTest {
         when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
                 userId, outfitId, TryonRequestStatus.COMPLETE)).thenReturn(Optional.of(completed));
         when(photoService.getLastModifiedAt(userId, PhotoType.FRONT))
-                .thenReturn(Optional.of(LocalDateTime.of(2026, 9, 4, 12, 0)));
+                .thenReturn(Optional.of(LocalDateTime.of(2026, 9, 4, 11, 30)));
         when(inMemoryRateLimiter.tryConsume(any(), any(), anyInt(), any())).thenReturn(true);
         UUID newRequestId = stubHappyPathAfterRateLimit(product);
 
@@ -201,7 +264,7 @@ class TryonRequestServiceTest {
         TryonRequest completed = TryonRequest.builder()
                 .id(completedId).status(TryonRequestStatus.COMPLETE)
                 .resultImageStorageKey("tryon-results/" + completedId + ".jpg")
-                .completedAt(LocalDateTime.of(2026, 9, 4, 12, 0))
+                .completedAt(LocalDateTime.of(2026, 9, 4, 11, 30))
                 .build();
         when(tryonRequestRepository.findFirstByUserIdAndOutfitIdAndStatusOrderByCompletedAtDesc(
                 userId, outfitId, TryonRequestStatus.COMPLETE)).thenReturn(Optional.of(completed));

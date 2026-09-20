@@ -296,9 +296,7 @@ class TryonStepExecutorTest {
     }
 
     private TryonProperties properties(int maxRetriesPerItem, long pollTimeoutMs) {
-        return new TryonProperties(
-                20, maxRetriesPerItem, 1, 1, pollTimeoutMs, 900000,
-                "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
+        return new TryonProperties(20, maxRetriesPerItem, 1, 1, pollTimeoutMs, 900000, 1200000, 300000);
     }
 
     @SuppressWarnings("unchecked")

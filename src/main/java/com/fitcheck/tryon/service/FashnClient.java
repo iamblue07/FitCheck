@@ -5,7 +5,7 @@ import com.fitcheck.common.exception.ExternalServiceException;
 import com.fitcheck.common.logging.enums.ExternalCallOutcome;
 import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.tryon.domain.FashnPredictionResult;
-import com.fitcheck.tryon.properties.TryonProperties;
+import com.fitcheck.tryon.properties.FashnModelProperties;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
@@ -14,7 +14,7 @@ import org.springframework.web.client.RestClientException;
 
 @Service
 @AllArgsConstructor
-@EnableConfigurationProperties(TryonProperties.class)
+@EnableConfigurationProperties(FashnModelProperties.class)
 public class FashnClient {
 
     private static final String PROVIDER = "fashn";
@@ -23,22 +23,22 @@ public class FashnClient {
     private static final String OPERATION_POLL = "poll-prediction";
 
     private final RestClient fashnRestClient;
-    private final TryonProperties properties;
+    private final FashnModelProperties modelProperties;
     private final ExternalCallLogger externalCallLogger;
 
     public String submitTryonV16(String modelImageUrl, String garmentImageUrl, String category) {
         FashnRunRequest request = new FashnRunRequest(
-                properties.fashnV16ModelName(),
+                modelProperties.v16ModelName(),
                 new FashnRunInputs(modelImageUrl, garmentImageUrl, category,
-                        properties.fashnV16Mode(), properties.fashnOutputFormat()));
+                        modelProperties.v16Mode(), modelProperties.outputFormat()));
         return submit(request, OPERATION_SUBMIT_V16);
     }
 
     public String submitTryonMax(String modelImageUrl, String productImageUrl) {
         FashnMaxRunRequest request = new FashnMaxRunRequest(
-                properties.fashnMaxModelName(),
-                new FashnMaxRunInputs(modelImageUrl, productImageUrl, properties.fashnMaxResolution(),
-                        properties.fashnMaxGenerationMode(), properties.fashnOutputFormat()));
+                modelProperties.maxModelName(),
+                new FashnMaxRunInputs(modelImageUrl, productImageUrl, modelProperties.maxResolution(),
+                        modelProperties.maxGenerationMode(), modelProperties.outputFormat()));
         return submit(request, OPERATION_SUBMIT_MAX);
     }
 

@@ -27,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.SearchResult;
 import org.springframework.data.domain.SearchResults;
 import org.springframework.data.domain.Vector;
@@ -46,6 +47,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -180,6 +182,53 @@ class PromptOutfitGenerationServiceTest {
         ArgumentCaptor<Set<String>> gendersCaptor = ArgumentCaptor.forClass(Set.class);
         verify(productSearchService).findNearest(eq(GarmentRole.TOP), gendersCaptor.capture(), any(), any(), any(), any());
         assertThat(gendersCaptor.getValue()).containsExactlyInAnyOrder("Men", "Unisex");
+    }
+
+    @Test
+    void generate_batchPersistenceLosesARace_retriesExactlyOnceAndReturnsTheFullResponseList() {
+        UserProfile profile = profileWith(Sex.OTHER, new BigDecimal("300"));
+        when(userProfileQueryService.getById(userId)).thenReturn(profile);
+        when(promptExtractionService.extract(anyString())).thenReturn(singleTopBottomFootwearQuery());
+        when(promptQueryEmbeddingService.embed(any())).thenReturn(Vector.of(new float[]{1f, 0f, 0f}));
+        stubAllSlotCandidates();
+        when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.7"));
+
+        UUID outfitId = UUID.randomUUID();
+        Outfit outfit = Outfit.builder().id(outfitId).build();
+        when(outfitPersistenceService.saveOrReuseBatch(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates uq item_set_hash"))
+                .thenReturn(List.of(outfit));
+        when(outfitItemQueryService.findItemViewsForOutfits(List.of(outfitId))).thenReturn(Map.of(outfitId, List.of()));
+        when(outfitItemQueryService.sumBasePriceForOutfits(List.of(outfitId)))
+                .thenReturn(Map.of(outfitId, new BigDecimal("150")));
+
+        List<OutfitResponse> responses = service.generate(userId, "retry me", true);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).outfitId()).isEqualTo(outfitId);
+        assertThat(responses.get(0).totalPrice()).isEqualTo(new BigDecimal("150"));
+        verify(outfitPersistenceService, times(2)).saveOrReuseBatch(any());
+        verify(aiPromptQueryService).logSuccess(userId, "retry me", null, true, List.of(outfitId));
+    }
+
+    @Test
+    void generate_batchPersistenceFailsTwice_propagatesRatherThanRetryingForever() {
+        UserProfile profile = profileWith(Sex.OTHER, new BigDecimal("300"));
+        when(userProfileQueryService.getById(userId)).thenReturn(profile);
+        when(promptExtractionService.extract(anyString())).thenReturn(singleTopBottomFootwearQuery());
+        when(promptQueryEmbeddingService.embed(any())).thenReturn(Vector.of(new float[]{1f, 0f, 0f}));
+        stubAllSlotCandidates();
+        when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.7"));
+
+        DataIntegrityViolationException second = new DataIntegrityViolationException("duplicate key again");
+        when(outfitPersistenceService.saveOrReuseBatch(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"))
+                .thenThrow(second);
+
+        assertThatThrownBy(() -> service.generate(userId, "always racing", true)).isSameAs(second);
+
+        verify(outfitPersistenceService, times(2)).saveOrReuseBatch(any());
+        verify(aiPromptQueryService, never()).logSuccess(any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -340,8 +389,6 @@ class PromptOutfitGenerationServiceTest {
 
         service.generate(userId, "two tops two bottoms", true);
 
-        // "shoes" is the only footwear candidate - if all 4 top x bottom combinations were kept,
-        // it would be used 4 times. The diversity cap (3) must stop that.
         ArgumentCaptor<List<OutfitPersistenceService.PersistenceCandidate>> candidatesCaptor =
                 ArgumentCaptor.forClass(List.class);
         verify(outfitPersistenceService).saveOrReuseBatch(candidatesCaptor.capture());

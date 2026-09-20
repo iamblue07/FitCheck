@@ -14,11 +14,7 @@ public record TryonProperties(
         @Positive long pollIntervalMs,
         @Positive long pollTimeoutMs,
         @Positive long jobTimeoutMs,
-        String fashnV16ModelName,
-        String fashnV16Mode,
-        String fashnMaxModelName,
-        String fashnMaxResolution,
-        String fashnMaxGenerationMode,
-        String fashnOutputFormat
+        @Positive long staleInFlightThresholdMs,
+        @Positive long staleSweepIntervalMs
 ) {
 }

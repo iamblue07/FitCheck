@@ -21,6 +21,7 @@ import com.fitcheck.outfit.support.OutfitGenderFilterResolver;
 import com.fitcheck.outfit.support.OutfitItemSetHasher;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.SearchResult;
 import org.springframework.data.domain.SearchResults;
@@ -113,7 +114,7 @@ public class PromptOutfitGenerationService {
                 .map(winner -> new OutfitPersistenceService.PersistenceCandidate(
                         winner.products(), winner.breakdown(), winner.itemSetHash(), OutfitSource.AI_PROMPT))
                 .toList();
-        List<Outfit> outfits = outfitPersistenceService.saveOrReuseBatch(candidates);
+        List<Outfit> outfits = persistCandidatesWithSingleRetry(candidates);
 
         List<UUID> outfitIds = outfits.stream().map(Outfit::getId).toList();
         Map<UUID, List<OutfitItemView>> itemViewsByOutfitId = outfitItemQueryService.findItemViewsForOutfits(outfitIds);
@@ -131,6 +132,15 @@ public class PromptOutfitGenerationService {
                 responses.stream().map(OutfitResponse::outfitId).toList());
 
         return responses;
+    }
+
+    private List<Outfit> persistCandidatesWithSingleRetry(
+            List<OutfitPersistenceService.PersistenceCandidate> candidates) {
+        try {
+            return outfitPersistenceService.saveOrReuseBatch(candidates);
+        } catch (DataIntegrityViolationException e) {
+            return outfitPersistenceService.saveOrReuseBatch(candidates);
+        }
     }
 
     private List<WinningOutfit> selectTopUniqueCombinations(List<BlueprintResult> sortedPool) {

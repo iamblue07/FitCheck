@@ -8,6 +8,7 @@ import com.fitcheck.outfit.entity.OutfitItem;
 import com.fitcheck.outfit.enums.OutfitSource;
 import com.fitcheck.outfit.repository.OutfitItemRepository;
 import com.fitcheck.outfit.repository.OutfitRepository;
+import com.fitcheck.outfit.support.OutfitItemAssembler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +18,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,7 +48,8 @@ class OutfitPersistenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OutfitPersistenceService(outfitRepository, outfitItemRepository, outfitInsertService);
+        service = new OutfitPersistenceService(
+                outfitRepository, outfitItemRepository, outfitInsertService, new OutfitItemAssembler());
     }
 
     @Test
@@ -59,37 +61,23 @@ class OutfitPersistenceServiceTest {
     }
 
     @Test
-    void saveNew_delegatesTheRowInsertToTheIsolatedInsertServiceWithGivenBreakdownHashAndSource() {
-        Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+    void saveNew_delegatesRowAndItemsWholesaleToTheIsolatedInsertService() {
+        Product top = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+        Product footwear = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.FOOTWEAR).build();
+        List<Product> products = List.of(top, footwear);
         CompatibilityScoreBreakdown breakdown = new CompatibilityScoreBreakdown(
                 new BigDecimal("0.9"), new BigDecimal("0.8"), new BigDecimal("0.85"),
                 new BigDecimal("0.9"), new BigDecimal("0.8765"));
         Outfit inserted = outfitWithHash("abc123");
-        when(outfitInsertService.insert(breakdown, "abc123", OutfitSource.MANUAL_SWAP)).thenReturn(inserted);
+        when(outfitInsertService.insert(products, breakdown, "abc123", OutfitSource.MANUAL_SWAP))
+                .thenReturn(inserted);
 
-        Outfit result = service.saveNew(List.of(product), breakdown, "abc123", OutfitSource.MANUAL_SWAP);
+        Outfit result = service.saveNew(products, breakdown, "abc123", OutfitSource.MANUAL_SWAP);
 
         assertThat(result).isSameAs(inserted);
-        verify(outfitInsertService).insert(breakdown, "abc123", OutfitSource.MANUAL_SWAP);
+        verify(outfitInsertService).insert(products, breakdown, "abc123", OutfitSource.MANUAL_SWAP);
         verify(outfitRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void saveNew_createsOneOutfitItemPerProductWithSlotSnapshottedFromGarmentRole() {
-        Product top = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
-        Product footwear = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.FOOTWEAR).build();
-        Outfit inserted = outfitWithHash("hash");
-        when(outfitInsertService.insert(any(), eq("hash"), eq(OutfitSource.PROFILE_GENERATED))).thenReturn(inserted);
-
-        service.saveNew(List.of(top, footwear), breakdownOf("0.5"), "hash", OutfitSource.PROFILE_GENERATED);
-
-        List<OutfitItem> items = captureSavedItems();
-        assertThat(items).hasSize(2);
-        assertThat(items.get(0).getOutfit()).isSameAs(inserted);
-        assertThat(items.get(0).getProduct()).isEqualTo(top);
-        assertThat(items.get(0).getSlot()).isEqualTo(GarmentRole.TOP);
-        assertThat(items.get(1).getProduct()).isEqualTo(footwear);
-        assertThat(items.get(1).getSlot()).isEqualTo(GarmentRole.FOOTWEAR);
+        verify(outfitItemRepository, never()).saveAll(any());
     }
 
     @Test
@@ -101,7 +89,7 @@ class OutfitPersistenceServiceTest {
         Outfit result = service.saveOrReuse(List.of(product), breakdownOf("0.5"), "hash", OutfitSource.MANUAL_SWAP);
 
         assertThat(result).isSameAs(existing);
-        verify(outfitInsertService, never()).insert(any(), any(), any());
+        verifyNoInteractions(outfitInsertService);
         verify(outfitItemRepository, never()).saveAll(any());
     }
 
@@ -113,13 +101,13 @@ class OutfitPersistenceServiceTest {
         when(outfitRepository.findByItemSetHash("hash"))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(wonByOtherTransaction));
-        when(outfitInsertService.insert(any(), eq("hash"), any()))
+        when(outfitInsertService.insert(any(), any(), eq("hash"), any()))
                 .thenThrow(new DataIntegrityViolationException("duplicate key value violates uq item_set_hash"));
 
         Outfit result = service.saveOrReuse(List.of(product), breakdownOf("0.5"), "hash", OutfitSource.MANUAL_SWAP);
 
         assertThat(result).isSameAs(wonByOtherTransaction);
-        verify(outfitInsertService, times(1)).insert(any(), eq("hash"), any());
+        verify(outfitInsertService, times(1)).insert(any(), any(), eq("hash"), any());
         verify(outfitRepository, times(2)).findByItemSetHash("hash");
         verify(outfitItemRepository, never()).saveAll(any());
     }
@@ -131,7 +119,7 @@ class OutfitPersistenceServiceTest {
                 new DataIntegrityViolationException("duplicate key value violates uq item_set_hash");
 
         when(outfitRepository.findByItemSetHash("hash")).thenReturn(Optional.empty());
-        when(outfitInsertService.insert(any(), eq("hash"), any())).thenThrow(cause);
+        when(outfitInsertService.insert(any(), any(), eq("hash"), any())).thenThrow(cause);
 
         assertThatThrownBy(() ->
                 service.saveOrReuse(List.of(product), breakdownOf("0.5"), "hash", OutfitSource.MANUAL_SWAP))
@@ -139,7 +127,7 @@ class OutfitPersistenceServiceTest {
                 .hasMessageContaining("hash")
                 .hasCause(cause);
 
-        verify(outfitInsertService, times(1)).insert(any(), eq("hash"), any());
+        verify(outfitInsertService, times(1)).insert(any(), any(), eq("hash"), any());
         verify(outfitRepository, times(2)).findByItemSetHash("hash");
     }
 
@@ -153,62 +141,74 @@ class OutfitPersistenceServiceTest {
                 candidate(List.of(product), "hash-1")));
 
         assertThat(results).containsExactly(existing);
-        verify(outfitInsertService, never()).insert(any(), any(), any());
+        verify(outfitRepository, never()).saveAndFlush(any());
         verify(outfitItemRepository).saveAll(List.of());
+        verifyNoInteractions(outfitInsertService);
     }
 
     @Test
-    void saveOrReuseBatch_persistsNewRowsThroughTheInsertServiceAndItemsInOneBatchSaveAll() {
+    void saveOrReuseBatch_neverRoutesThroughTheRequiresNewInsertService() {
+        Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+        when(outfitRepository.findByItemSetHashIn(List.of("hash-new"))).thenReturn(List.of());
+        when(outfitRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.saveOrReuseBatch(List.of(candidate(List.of(product), "hash-new")));
+
+        verifyNoInteractions(outfitInsertService);
+    }
+
+    @Test
+    void saveOrReuseBatch_persistsNewRowsInlineAndAllItemsInOneBatchSaveAll() {
         Product topA = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
         Product bottomA = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.BOTTOM).build();
         Product topB = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
         Outfit existing = outfitWithHash("hash-existing");
-        Outfit new1 = outfitWithHash("hash-new-1");
-        Outfit new2 = outfitWithHash("hash-new-2");
 
         when(outfitRepository.findByItemSetHashIn(List.of("hash-existing", "hash-new-1", "hash-new-2")))
                 .thenReturn(List.of(existing));
-        when(outfitInsertService.insert(any(), eq("hash-new-1"), any())).thenReturn(new1);
-        when(outfitInsertService.insert(any(), eq("hash-new-2"), any())).thenReturn(new2);
+        when(outfitRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         List<Outfit> results = service.saveOrReuseBatch(List.of(
                 candidate(List.of(topA), "hash-existing"),
                 candidate(List.of(topA, bottomA), "hash-new-1"),
                 candidate(List.of(topB), "hash-new-2")));
 
-        assertThat(results).containsExactly(existing, new1, new2);
-        verify(outfitInsertService, times(2)).insert(any(), any(), any());
+        assertThat(results).extracting(Outfit::getItemSetHash)
+                .containsExactly("hash-existing", "hash-new-1", "hash-new-2");
+        assertThat(results.get(0)).isSameAs(existing);
+        verify(outfitRepository, times(2)).saveAndFlush(any());
 
         List<OutfitItem> items = captureSavedItems();
         assertThat(items).hasSize(3);
-        assertThat(items).extracting(OutfitItem::getOutfit).containsExactly(new1, new1, new2);
+        assertThat(items).extracting(outfitItem -> outfitItem.getOutfit().getItemSetHash())
+                .containsExactly("hash-new-1", "hash-new-1", "hash-new-2");
+        assertThat(items).extracting(OutfitItem::getProduct).containsExactly(topA, bottomA, topB);
     }
 
     @Test
-    void saveOrReuseBatch_raceOnOneCandidate_fallsBackToExistingWithoutAbortingRestOfBatch() {
+    void saveOrReuseBatch_raceOnOneCandidate_propagatesSoTheWholeTransactionRollsBackAndTheCallerCanRetry() {
         Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
-        Outfit wonByOtherTransaction = outfitWithHash("hash-racy");
-        Outfit clean = outfitWithHash("hash-clean");
+        DataIntegrityViolationException violation = new DataIntegrityViolationException("duplicate key");
 
         when(outfitRepository.findByItemSetHashIn(List.of("hash-racy", "hash-clean"))).thenReturn(List.of());
-        when(outfitInsertService.insert(any(), eq("hash-racy"), any()))
-                .thenThrow(new DataIntegrityViolationException("duplicate key"));
-        when(outfitInsertService.insert(any(), eq("hash-clean"), any())).thenReturn(clean);
-        when(outfitRepository.findByItemSetHash("hash-racy")).thenReturn(Optional.of(wonByOtherTransaction));
+        when(outfitRepository.saveAndFlush(any())).thenThrow(violation);
 
-        List<Outfit> results = service.saveOrReuseBatch(List.of(
+        assertThatThrownBy(() -> service.saveOrReuseBatch(List.of(
                 candidate(List.of(product), "hash-racy"),
-                candidate(List.of(product), "hash-clean")));
+                candidate(List.of(product), "hash-clean"))))
+                .isSameAs(violation);
 
-        assertThat(results).containsExactly(wonByOtherTransaction, clean);
+        verify(outfitItemRepository, never()).saveAll(any());
+        verify(outfitRepository, never()).findByItemSetHash(any());
     }
 
     @Test
-    void saveOrReuseBatch_raceOnCandidateThreeOfFifty_leavesTheOtherFortyNineAndAllTheirItemsPersisted() {
+    void saveOrReuseBatch_raceOnCandidateThreeOfFifty_abortsTheWholeBatchRatherThanSwallowingIt() {
         Product product = Product.builder().id(UUID.randomUUID()).garmentRole(GarmentRole.TOP).build();
+        DataIntegrityViolationException violation = new DataIntegrityViolationException("duplicate key");
 
-        List<OutfitPersistenceService.PersistenceCandidate> candidates = new ArrayList<>();
-        List<String> hashes = new ArrayList<>();
+        List<OutfitPersistenceService.PersistenceCandidate> candidates = new java.util.ArrayList<>();
+        List<String> hashes = new java.util.ArrayList<>();
         for (int i = 0; i < 50; i++) {
             String hash = "hash-" + i;
             hashes.add(hash);
@@ -216,28 +216,15 @@ class OutfitPersistenceServiceTest {
         }
 
         when(outfitRepository.findByItemSetHashIn(hashes)).thenReturn(List.of());
-        for (int i = 0; i < 50; i++) {
-            String hash = "hash-" + i;
-            if (i == 2) {
-                when(outfitInsertService.insert(any(), eq(hash), any()))
-                        .thenThrow(new DataIntegrityViolationException("duplicate key"));
-            } else {
-                when(outfitInsertService.insert(any(), eq(hash), any())).thenReturn(outfitWithHash(hash));
-            }
-        }
-        Outfit wonByOtherTransaction = outfitWithHash("hash-2");
-        when(outfitRepository.findByItemSetHash("hash-2")).thenReturn(Optional.of(wonByOtherTransaction));
+        when(outfitRepository.saveAndFlush(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0))
+                .thenAnswer(invocation -> invocation.getArgument(0))
+                .thenThrow(violation);
 
-        List<Outfit> results = service.saveOrReuseBatch(candidates);
+        assertThatThrownBy(() -> service.saveOrReuseBatch(candidates)).isSameAs(violation);
 
-        assertThat(results).hasSize(50);
-        assertThat(results.get(2)).isSameAs(wonByOtherTransaction);
-        assertThat(results).extracting(Outfit::getItemSetHash).containsExactlyElementsOf(hashes);
-
-        List<OutfitItem> items = captureSavedItems();
-        assertThat(items).hasSize(49);
-        assertThat(items).extracting(outfitItem -> outfitItem.getOutfit().getItemSetHash())
-                .doesNotContain("hash-2");
+        verify(outfitRepository, times(3)).saveAndFlush(any());
+        verify(outfitItemRepository, never()).saveAll(any());
     }
 
     private OutfitPersistenceService.PersistenceCandidate candidate(List<Product> products, String hash) {

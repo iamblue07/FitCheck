@@ -3,7 +3,7 @@ package com.fitcheck.tryon.service;
 import com.fitcheck.common.exception.ExternalServiceException;
 import com.fitcheck.common.logging.support.ExternalCallLogger;
 import com.fitcheck.tryon.domain.FashnPredictionResult;
-import com.fitcheck.tryon.properties.TryonProperties;
+import com.fitcheck.tryon.properties.FashnModelProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -28,7 +28,6 @@ class FashnClientTest {
 
     private MockRestServiceServer mockServer;
     private FashnClient client;
-    private TryonProperties properties;
     private ExternalCallLogger externalCallLogger;
 
     @BeforeEach
@@ -37,10 +36,9 @@ class FashnClientTest {
         mockServer = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
         externalCallLogger = mock(ExternalCallLogger.class);
-        properties = new TryonProperties(
-                20, 5, 2000L, 3000L, 60000L, 900000L,
+        FashnModelProperties modelProperties = new FashnModelProperties(
                 "tryon-v1.6", "balanced", "tryon-max", "1k", "fast", "jpeg");
-        client = new FashnClient(restClient, properties, externalCallLogger);
+        client = new FashnClient(restClient, modelProperties, externalCallLogger);
     }
 
     @Test
@@ -67,8 +65,7 @@ class FashnClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         MockRestServiceServer customServer = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
-        TryonProperties customProperties = new TryonProperties(
-                20, 5, 2000L, 3000L, 60000L, 900000L,
+        FashnModelProperties customProperties = new FashnModelProperties(
                 "tryon-v1.7-preview", "performance", "tryon-max", "1k", "fast", "png");
         FashnClient customClient = new FashnClient(restClient, customProperties, externalCallLogger);
 
@@ -109,8 +106,7 @@ class FashnClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         MockRestServiceServer customServer = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
-        TryonProperties customProperties = new TryonProperties(
-                20, 5, 2000L, 3000L, 60000L, 900000L,
+        FashnModelProperties customProperties = new FashnModelProperties(
                 "tryon-v1.6", "balanced", "tryon-max", "4k", "quality", "jpeg");
         FashnClient customClient = new FashnClient(restClient, customProperties, externalCallLogger);
 
