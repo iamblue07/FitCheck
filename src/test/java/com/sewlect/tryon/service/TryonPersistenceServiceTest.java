@@ -1,7 +1,6 @@
 package com.sewlect.tryon.service;
 
 import com.sewlect.catalog.entity.Product;
-import com.sewlect.common.exception.ResourceNotFoundException;
 import com.sewlect.identity.entity.User;
 import com.sewlect.outfit.entity.Outfit;
 import com.sewlect.tryon.entity.TryonRequest;
@@ -14,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -21,13 +21,15 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -121,160 +123,121 @@ class TryonPersistenceServiceTest {
     }
 
     @Test
-    void markRequestProcessing_existingRequest_movesPendingToProcessingWithoutSettingCompletedAt() {
+    void markRequestProcessing_pendingRequest_transitionsToProcessingStampingUpdatedAtAndReturnsTrue() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PENDING).build();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+        when(tryonRequestRepository.transitionStatus(requestId, TryonRequestStatus.PENDING,
+                TryonRequestStatus.PROCESSING, LocalDateTime.now(FIXED_CLOCK))).thenReturn(1);
 
-        service.markRequestProcessing(requestId);
-
-        assertThat(request.getStatus()).isEqualTo(TryonRequestStatus.PROCESSING);
-        assertThat(request.getCompletedAt()).isNull();
-        assertThat(request.getErrorMessage()).isNull();
-        verify(tryonRequestRepository).save(request);
+        assertThat(service.markRequestProcessing(requestId)).isTrue();
     }
 
     @Test
-    void markRequestProcessing_requestNotFound_throwsResourceNotFoundExceptionAndNeverSaves() {
+    void markRequestProcessing_requestNoLongerPending_returnsFalse() {
         UUID requestId = UUID.randomUUID();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.empty());
+        when(tryonRequestRepository.transitionStatus(requestId, TryonRequestStatus.PENDING,
+                TryonRequestStatus.PROCESSING, LocalDateTime.now(FIXED_CLOCK))).thenReturn(0);
 
-        assertThatThrownBy(() -> service.markRequestProcessing(requestId))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining(requestId.toString());
-
-        verify(tryonRequestRepository, never()).save(any());
+        assertThat(service.markRequestProcessing(requestId)).isFalse();
     }
 
     @Test
-    void markItemComplete_existingItem_setsStatusAndSaves() {
+    void markItemComplete_pendingItem_transitionsToCompleteAndReturnsTrue() {
         UUID itemId = UUID.randomUUID();
-        TryonRequestItem item = TryonRequestItem.builder().id(itemId).status(TryonRequestItemStatus.PENDING).build();
-        when(tryonRequestItemRepository.findById(itemId)).thenReturn(Optional.of(item));
+        when(tryonRequestItemRepository.transitionStatus(
+                itemId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.COMPLETE)).thenReturn(1);
 
-        service.markItemComplete(itemId);
-
-        assertThat(item.getStatus()).isEqualTo(TryonRequestItemStatus.COMPLETE);
-        verify(tryonRequestItemRepository).save(item);
+        assertThat(service.markItemComplete(itemId)).isTrue();
     }
 
     @Test
-    void markItemComplete_itemNotFound_throwsResourceNotFoundException() {
+    void markItemComplete_itemNoLongerPending_returnsFalse() {
         UUID itemId = UUID.randomUUID();
-        when(tryonRequestItemRepository.findById(itemId)).thenReturn(Optional.empty());
+        when(tryonRequestItemRepository.transitionStatus(
+                itemId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.COMPLETE)).thenReturn(0);
 
-        assertThatThrownBy(() -> service.markItemComplete(itemId))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining(itemId.toString());
-
-        verify(tryonRequestItemRepository, never()).save(any());
+        assertThat(service.markItemComplete(itemId)).isFalse();
     }
 
     @Test
-    void markItemFailed_existingItem_setsStatusAndSaves() {
+    void markItemFailed_pendingItem_transitionsToFailedAndReturnsTrue() {
         UUID itemId = UUID.randomUUID();
-        TryonRequestItem item = TryonRequestItem.builder().id(itemId).status(TryonRequestItemStatus.PENDING).build();
-        when(tryonRequestItemRepository.findById(itemId)).thenReturn(Optional.of(item));
+        when(tryonRequestItemRepository.transitionStatus(
+                itemId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.FAILED)).thenReturn(1);
 
-        service.markItemFailed(itemId);
-
-        assertThat(item.getStatus()).isEqualTo(TryonRequestItemStatus.FAILED);
-        verify(tryonRequestItemRepository).save(item);
+        assertThat(service.markItemFailed(itemId)).isTrue();
     }
 
     @Test
-    void markItemFailed_itemNotFound_throwsResourceNotFoundException() {
+    void markItemFailed_itemNoLongerPending_returnsFalse() {
         UUID itemId = UUID.randomUUID();
-        when(tryonRequestItemRepository.findById(itemId)).thenReturn(Optional.empty());
+        when(tryonRequestItemRepository.transitionStatus(
+                itemId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.FAILED)).thenReturn(0);
 
-        assertThatThrownBy(() -> service.markItemFailed(itemId))
-                .isInstanceOf(ResourceNotFoundException.class);
-
-        verify(tryonRequestItemRepository, never()).save(any());
+        assertThat(service.markItemFailed(itemId)).isFalse();
     }
 
     @Test
-    void markRequestComplete_existingRequest_setsStatusStorageKeyAndCompletedAtFromClock() {
+    void markRequestComplete_inFlightRequest_completesWithStorageKeyAndCompletedAtFromClock() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+        when(tryonRequestRepository.completeIfStatusIn(eq(requestId), anyCollection(),
+                eq(TryonRequestStatus.COMPLETE), eq("tryon-results/abc.jpg"), eq(LocalDateTime.now(FIXED_CLOCK))))
+                .thenReturn(1);
 
-        service.markRequestComplete(requestId, "tryon-results/abc.jpg");
+        assertThat(service.markRequestComplete(requestId, "tryon-results/abc.jpg")).isTrue();
 
-        assertThat(request.getStatus()).isEqualTo(TryonRequestStatus.COMPLETE);
-        assertThat(request.getResultImageStorageKey()).isEqualTo("tryon-results/abc.jpg");
-        assertThat(request.getCompletedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
-        verify(tryonRequestRepository).save(request);
+        assertThat(capturedExpectedStatusesForComplete(requestId))
+                .containsExactlyInAnyOrder(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
     }
 
     @Test
-    void markRequestComplete_requestNotFound_throwsResourceNotFoundException() {
+    void markRequestComplete_requestAlreadyTerminal_returnsFalse() {
         UUID requestId = UUID.randomUUID();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.empty());
+        when(tryonRequestRepository.completeIfStatusIn(eq(requestId), anyCollection(),
+                eq(TryonRequestStatus.COMPLETE), eq("tryon-results/abc.jpg"), any())).thenReturn(0);
 
-        assertThatThrownBy(() -> service.markRequestComplete(requestId, "key"))
-                .isInstanceOf(ResourceNotFoundException.class);
-
-        verify(tryonRequestRepository, never()).save(any());
+        assertThat(service.markRequestComplete(requestId, "tryon-results/abc.jpg")).isFalse();
     }
 
     @Test
-    void markRequestFailed_existingRequest_setsStatusErrorMessageAndCompletedAt() {
+    void markRequestFailed_inFlightRequest_failsRequestThenBulkFailsPendingItems() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
-        when(tryonRequestItemRepository.findByTryonRequestIdAndStatus(requestId, TryonRequestItemStatus.PENDING))
-                .thenReturn(List.of());
+        when(tryonRequestRepository.failIfStatusIn(eq(requestId), anyCollection(),
+                eq(TryonRequestStatus.FAILED), eq("FASHN exhausted retries"), eq(LocalDateTime.now(FIXED_CLOCK))))
+                .thenReturn(1);
 
-        service.markRequestFailed(requestId, "FASHN exhausted retries");
+        assertThat(service.markRequestFailed(requestId, "FASHN exhausted retries")).isTrue();
 
-        assertThat(request.getStatus()).isEqualTo(TryonRequestStatus.FAILED);
-        assertThat(request.getErrorMessage()).isEqualTo("FASHN exhausted retries");
-        assertThat(request.getCompletedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
-        verify(tryonRequestRepository).save(request);
+        InOrder ordered = inOrder(tryonRequestRepository, tryonRequestItemRepository);
+        ordered.verify(tryonRequestRepository).failIfStatusIn(eq(requestId), anyCollection(),
+                eq(TryonRequestStatus.FAILED), eq("FASHN exhausted retries"), any());
+        ordered.verify(tryonRequestItemRepository).transitionStatusByTryonRequestId(
+                requestId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.FAILED);
+        assertThat(capturedExpectedStatusesForFail(requestId))
+                .containsExactlyInAnyOrder(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
     }
 
     @Test
-    void markRequestFailed_bulkTransitionsEveryPendingItemToFailed() {
+    void markRequestFailed_requestAlreadyTerminal_returnsFalseAndNeverTouchesItems() {
         UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
-        TryonRequestItem pendingItem1 = TryonRequestItem.builder()
-                .id(UUID.randomUUID()).status(TryonRequestItemStatus.PENDING).build();
-        TryonRequestItem pendingItem2 = TryonRequestItem.builder()
-                .id(UUID.randomUUID()).status(TryonRequestItemStatus.PENDING).build();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
-        when(tryonRequestItemRepository.findByTryonRequestIdAndStatus(requestId, TryonRequestItemStatus.PENDING))
-                .thenReturn(List.of(pendingItem1, pendingItem2));
+        when(tryonRequestRepository.failIfStatusIn(eq(requestId), anyCollection(),
+                eq(TryonRequestStatus.FAILED), eq("step failed"), any())).thenReturn(0);
 
-        service.markRequestFailed(requestId, "step failed");
+        assertThat(service.markRequestFailed(requestId, "step failed")).isFalse();
 
-        assertThat(pendingItem1.getStatus()).isEqualTo(TryonRequestItemStatus.FAILED);
-        assertThat(pendingItem2.getStatus()).isEqualTo(TryonRequestItemStatus.FAILED);
-        verify(tryonRequestItemRepository).saveAll(List.of(pendingItem1, pendingItem2));
+        verify(tryonRequestItemRepository, never()).transitionStatusByTryonRequestId(any(), any(), any());
     }
 
-    @Test
-    void markRequestFailed_noPendingItemsLeft_savesEmptyListWithoutException() {
-        UUID requestId = UUID.randomUUID();
-        TryonRequest request = TryonRequest.builder().id(requestId).status(TryonRequestStatus.PROCESSING).build();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
-        when(tryonRequestItemRepository.findByTryonRequestIdAndStatus(requestId, TryonRequestItemStatus.PENDING))
-                .thenReturn(List.of());
-
-        service.markRequestFailed(requestId, "step failed");
-
-        verify(tryonRequestItemRepository).saveAll(List.of());
+    @SuppressWarnings("unchecked")
+    private Collection<TryonRequestStatus> capturedExpectedStatusesForComplete(UUID requestId) {
+        ArgumentCaptor<Collection<TryonRequestStatus>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(tryonRequestRepository).completeIfStatusIn(eq(requestId), captor.capture(), any(), any(), any());
+        return captor.getValue();
     }
 
-    @Test
-    void markRequestFailed_requestNotFound_throwsResourceNotFoundExceptionAndNeverQueriesItems() {
-        UUID requestId = UUID.randomUUID();
-        when(tryonRequestRepository.findById(requestId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.markRequestFailed(requestId, "irrelevant"))
-                .isInstanceOf(ResourceNotFoundException.class);
-
-        verify(tryonRequestItemRepository, never()).findByTryonRequestIdAndStatus(any(), any());
-        verify(tryonRequestRepository, never()).save(any());
+    @SuppressWarnings("unchecked")
+    private Collection<TryonRequestStatus> capturedExpectedStatusesForFail(UUID requestId) {
+        ArgumentCaptor<Collection<TryonRequestStatus>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(tryonRequestRepository).failIfStatusIn(eq(requestId), captor.capture(), any(), any(), any());
+        return captor.getValue();
     }
 }

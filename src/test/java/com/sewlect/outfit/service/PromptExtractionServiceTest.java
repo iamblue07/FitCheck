@@ -18,6 +18,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +43,8 @@ class PromptExtractionServiceTest {
         OutfitPromptProperties properties = new OutfitPromptProperties(2, 3, 200, 200, 50);
         service = new PromptExtractionService(
                 ollamaCloudChatModel, properties,
-                new OllamaCloudProperties("https://ollama.com", "test-key", "gpt-oss:20b-cloud"),
+                new OllamaCloudProperties("https://ollama.com", "test-key", "gpt-oss:20b-cloud",
+                        Duration.ofSeconds(5), Duration.ofSeconds(60), 1, Duration.ofSeconds(2)),
                 externalCallLogger);
         lenient().when(ollamaCloudChatModel.getOptions()).thenReturn(OllamaChatOptions.builder().build());
     }

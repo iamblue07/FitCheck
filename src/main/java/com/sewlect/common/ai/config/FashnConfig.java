@@ -1,6 +1,7 @@
 package com.sewlect.common.ai.config;
 
 import com.sewlect.common.ai.properties.FashnProperties;
+import com.sewlect.common.ai.util.TimeoutRequestFactories;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,7 @@ public class FashnConfig {
     @Bean
     public RestClient fashnRestClient() {
         return RestClient.builder()
+                .requestFactory(TimeoutRequestFactories.create(properties.connectTimeout(), properties.readTimeout()))
                 .baseUrl(properties.baseUrl())
                 .defaultHeader("Authorization", "Bearer " + properties.apiKey())
                 .build();

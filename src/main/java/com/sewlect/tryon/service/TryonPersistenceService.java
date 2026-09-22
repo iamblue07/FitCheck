@@ -1,7 +1,6 @@
 package com.sewlect.tryon.service;
 
 import com.sewlect.catalog.entity.Product;
-import com.sewlect.common.exception.ResourceNotFoundException;
 import com.sewlect.identity.entity.User;
 import com.sewlect.outfit.entity.Outfit;
 import com.sewlect.tryon.entity.TryonRequest;
@@ -18,11 +17,15 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @AllArgsConstructor
 public class TryonPersistenceService {
+
+    private static final Set<TryonRequestStatus> IN_FLIGHT_STATUSES =
+            Set.of(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
 
     private final TryonRequestRepository tryonRequestRepository;
     private final TryonRequestItemRepository tryonRequestItemRepository;
@@ -52,53 +55,38 @@ public class TryonPersistenceService {
     }
 
     @Transactional
-    public void markRequestProcessing(UUID requestId) {
-        TryonRequest tryonRequest = tryonRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tryon request not found: " + requestId));
-        tryonRequest.setStatus(TryonRequestStatus.PROCESSING);
-        tryonRequestRepository.save(tryonRequest);
+    public boolean markRequestProcessing(UUID requestId) {
+        return tryonRequestRepository.transitionStatus(
+                requestId, TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING, LocalDateTime.now(clock)) == 1;
     }
 
     @Transactional
-    public void markItemComplete(UUID itemId) {
-        TryonRequestItem item = tryonRequestItemRepository.findById(itemId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tryon request item not found: " + itemId));
-        item.setStatus(TryonRequestItemStatus.COMPLETE);
-        tryonRequestItemRepository.save(item);
+    public boolean markItemComplete(UUID itemId) {
+        return tryonRequestItemRepository.transitionStatus(
+                itemId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.COMPLETE) == 1;
     }
 
     @Transactional
-    public void markItemFailed(UUID itemId) {
-        TryonRequestItem item = tryonRequestItemRepository.findById(itemId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tryon request item not found: " + itemId));
-        item.setStatus(TryonRequestItemStatus.FAILED);
-        tryonRequestItemRepository.save(item);
+    public boolean markItemFailed(UUID itemId) {
+        return tryonRequestItemRepository.transitionStatus(
+                itemId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.FAILED) == 1;
     }
 
     @Transactional
-    public void markRequestComplete(UUID requestId, String storageKey) {
-        TryonRequest tryonRequest = tryonRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tryon request not found: " + requestId));
-        tryonRequest.setStatus(TryonRequestStatus.COMPLETE);
-        tryonRequest.setResultImageStorageKey(storageKey);
-        tryonRequest.setCompletedAt(LocalDateTime.now(clock));
-        tryonRequestRepository.save(tryonRequest);
+    public boolean markRequestComplete(UUID requestId, String storageKey) {
+        return tryonRequestRepository.completeIfStatusIn(
+                requestId, IN_FLIGHT_STATUSES, TryonRequestStatus.COMPLETE, storageKey, LocalDateTime.now(clock)) == 1;
     }
 
     @Transactional
-    public void markRequestFailed(UUID requestId, String errorMessage) {
-        TryonRequest tryonRequest = tryonRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tryon request not found: " + requestId));
-        tryonRequest.setStatus(TryonRequestStatus.FAILED);
-        tryonRequest.setErrorMessage(errorMessage);
-        tryonRequest.setCompletedAt(LocalDateTime.now(clock));
-        tryonRequestRepository.save(tryonRequest);
-
-        List<TryonRequestItem> pendingItems = tryonRequestItemRepository.findByTryonRequestIdAndStatus(
-                requestId, TryonRequestItemStatus.PENDING);
-        for (TryonRequestItem item : pendingItems) {
-            item.setStatus(TryonRequestItemStatus.FAILED);
+    public boolean markRequestFailed(UUID requestId, String errorMessage) {
+        int updated = tryonRequestRepository.failIfStatusIn(
+                requestId, IN_FLIGHT_STATUSES, TryonRequestStatus.FAILED, errorMessage, LocalDateTime.now(clock));
+        if (updated == 0) {
+            return false;
         }
-        tryonRequestItemRepository.saveAll(pendingItems);
+        tryonRequestItemRepository.transitionStatusByTryonRequestId(
+                requestId, TryonRequestItemStatus.PENDING, TryonRequestItemStatus.FAILED);
+        return true;
     }
 }

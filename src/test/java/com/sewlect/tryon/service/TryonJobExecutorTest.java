@@ -1,6 +1,7 @@
 package com.sewlect.tryon.service;
 
 import com.sewlect.catalog.entity.Product;
+import com.sewlect.common.ai.properties.FashnProperties;
 import com.sewlect.common.exception.ExternalServiceException;
 import com.sewlect.common.exception.ResourceNotFoundException;
 import com.sewlect.common.storage.service.StorageService;
@@ -38,11 +39,14 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -94,6 +98,10 @@ class TryonJobExecutorTest {
         requestId = UUID.randomUUID();
         userId = UUID.randomUUID();
         user = User.builder().id(userId).build();
+
+        lenient().when(tryonPersistenceService.markRequestProcessing(any())).thenReturn(true);
+        lenient().when(tryonPersistenceService.markItemComplete(any())).thenReturn(true);
+        lenient().when(tryonPersistenceService.markRequestComplete(any(), any())).thenReturn(true);
     }
 
     @Test
@@ -375,7 +383,8 @@ class TryonJobExecutorTest {
         @SuppressWarnings("unchecked")
         HttpResponse<byte[]> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(404);
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         assertThatThrownBy(() -> jobExecutor.run(requestId))
                 .isInstanceOf(ExternalServiceException.class)
@@ -391,8 +400,8 @@ class TryonJobExecutorTest {
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
         when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
-                .thenThrow(new IOException("connection reset"));
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.failedFuture(new IOException("connection reset")));
 
         assertThatThrownBy(() -> jobExecutor.run(requestId))
                 .isInstanceOf(ExternalServiceException.class)
@@ -406,8 +415,10 @@ class TryonJobExecutorTest {
         TryonRequestItem item = itemFor(product(GarmentRole.TOP));
         when(tryonRequestItemRepository.findByTryonRequestIdOrderBySequenceOrder(requestId)).thenReturn(List.of(item));
         when(tryonStepExecutor.execute(any(), any())).thenReturn("https://cdn.fashn.ai/step1.jpg");
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
-                .thenThrow(new InterruptedException());
+        @SuppressWarnings("unchecked")
+        CompletableFuture<HttpResponse<byte[]>> pending = mock(CompletableFuture.class);
+        when(pending.get(anyLong(), any(TimeUnit.class))).thenThrow(new InterruptedException());
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(pending);
 
         assertThatThrownBy(() -> jobExecutor.run(requestId))
                 .isInstanceOf(ExternalServiceException.class);
@@ -490,11 +501,16 @@ class TryonJobExecutorTest {
         return new TryonJobExecutor(
                 tryonRequestRepository, tryonRequestItemRepository, tryonStepExecutor, fashnClient,
                 tryonPersistenceService, photoService, storageService, tryonProperties, fashnModelProperties,
-                httpClient, clock);
+                fashnProperties(), httpClient, clock);
     }
 
     private TryonProperties tryonPropertiesWith(long jobTimeoutMs) {
         return new TryonProperties(20, 1, 2000, 3000, 180000, jobTimeoutMs, 1200000, 300000);
+    }
+
+    private FashnProperties fashnProperties() {
+        return new FashnProperties("https://fashn.test/v1", "test-key",
+                Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(60));
     }
 
     private FashnModelProperties modelPropertiesWith(String outputFormat) {
@@ -530,12 +546,13 @@ class TryonJobExecutorTest {
         HttpResponse<byte[]> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(200);
         when(response.body()).thenReturn("image-bytes".getBytes());
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
     }
 
     private void verifyDownloadedFrom(String expectedUrl) throws Exception {
         ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
-        verify(httpClient).send(requestCaptor.capture(), any(HttpResponse.BodyHandler.class));
+        verify(httpClient).sendAsync(requestCaptor.capture(), any(HttpResponse.BodyHandler.class));
         assertThat(requestCaptor.getValue().uri()).isEqualTo(URI.create(expectedUrl));
     }
 

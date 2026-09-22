@@ -1,6 +1,7 @@
 package com.sewlect.tryon.service;
 
 import com.sewlect.catalog.entity.Product;
+import com.sewlect.common.ai.properties.FashnProperties;
 import com.sewlect.common.exception.ExternalServiceException;
 import com.sewlect.common.exception.ResourceNotFoundException;
 import com.sewlect.common.storage.service.StorageService;
@@ -20,7 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -30,6 +30,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -47,11 +51,15 @@ public class TryonJobExecutor {
     private final StorageService storageService;
     private final TryonProperties properties;
     private final FashnModelProperties modelProperties;
+    private final FashnProperties fashnProperties;
     private final HttpClient httpClient;
     private final Clock clock;
 
     public void run(UUID tryonRequestId) {
-        tryonPersistenceService.markRequestProcessing(tryonRequestId);
+        if (!tryonPersistenceService.markRequestProcessing(tryonRequestId)) {
+            log.warn("Tryon job {} skipped: request is no longer pending", tryonRequestId);
+            return;
+        }
 
         TryonRequest tryonRequest = tryonRequestRepository.findById(tryonRequestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tryon request not found: " + tryonRequestId));
@@ -86,13 +94,20 @@ public class TryonJobExecutor {
                 tryonPersistenceService.markRequestFailed(tryonRequestId, e.getMessage());
                 return;
             }
-            tryonPersistenceService.markItemComplete(item.getId());
+            if (!tryonPersistenceService.markItemComplete(item.getId())) {
+                log.warn("Tryon job {} stopped: request was terminated while item {} was running",
+                        tryonRequestId, item.getId());
+                return;
+            }
         }
 
         byte[] resultBytes = downloadBytes(currentImageUrl);
         String storageKey = StorageKeys.tryonResultKey(tryonRequestId);
         storageService.store(storageKey, resultBytes, "image/" + modelProperties.outputFormat());
-        tryonPersistenceService.markRequestComplete(tryonRequestId, storageKey);
+        if (!tryonPersistenceService.markRequestComplete(tryonRequestId, storageKey)) {
+            log.warn("Tryon job {} finished after the request was terminated; result {} was not recorded",
+                    tryonRequestId, storageKey);
+        }
     }
 
     private Supplier<String> submitterFor(Supplier<String> modelImageUrlSupplier, Product product) {
@@ -119,19 +134,27 @@ public class TryonJobExecutor {
     }
 
     private byte[] downloadBytes(String imageUrl) {
+        long timeoutMs = fashnProperties.resultDownloadTimeout().toMillis();
+        HttpRequest request = HttpRequest.newBuilder(URI.create(imageUrl)).GET().build();
+        CompletableFuture<HttpResponse<byte[]>> pending =
+                httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(imageUrl)).GET().build();
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> response = pending.get(timeoutMs, TimeUnit.MILLISECONDS);
 
             if (response.statusCode() != 200) {
                 throw new ExternalServiceException(
                         "Failed to download FASHN try-on result, HTTP " + response.statusCode() + ": " + imageUrl);
             }
             return response.body();
-        } catch (IOException e) {
+        } catch (TimeoutException e) {
+            pending.cancel(true);
             throw new ExternalServiceException(
-                    "Failed to download FASHN try-on result " + imageUrl + ": " + e.getMessage());
+                    "Timed out after " + timeoutMs + "ms downloading FASHN try-on result: " + imageUrl);
+        } catch (ExecutionException e) {
+            throw new ExternalServiceException(
+                    "Failed to download FASHN try-on result " + imageUrl + ": " + e.getCause().getMessage());
         } catch (InterruptedException e) {
+            pending.cancel(true);
             Thread.currentThread().interrupt();
             throw new ExternalServiceException("Interrupted while downloading FASHN try-on result: " + imageUrl);
         }

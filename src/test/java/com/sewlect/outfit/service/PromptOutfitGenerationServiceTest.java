@@ -188,7 +188,8 @@ class PromptOutfitGenerationServiceTest {
     void generate_batchPersistenceLosesARace_retriesExactlyOnceAndReturnsTheFullResponseList() {
         UserProfile profile = profileWith(Sex.OTHER, new BigDecimal("300"));
         when(userProfileQueryService.getById(userId)).thenReturn(profile);
-        when(promptExtractionService.extract(anyString())).thenReturn(singleTopBottomFootwearQuery());
+        StructuredPromptQuery query = singleTopBottomFootwearQuery();
+        when(promptExtractionService.extract(anyString())).thenReturn(query);
         when(promptQueryEmbeddingService.embed(any())).thenReturn(Vector.of(new float[]{1f, 0f, 0f}));
         stubAllSlotCandidates();
         when(outfitCompatibilityScorer.score(any())).thenReturn(breakdown("0.7"));
@@ -208,7 +209,7 @@ class PromptOutfitGenerationServiceTest {
         assertThat(responses.get(0).outfitId()).isEqualTo(outfitId);
         assertThat(responses.get(0).totalPrice()).isEqualTo(new BigDecimal("150"));
         verify(outfitPersistenceService, times(2)).saveOrReuseBatch(any());
-        verify(aiPromptQueryService).logSuccess(userId, "retry me", null, true, List.of(outfitId));
+        verify(aiPromptQueryService).logSuccess(userId, "retry me", query, true, List.of(outfitId));
     }
 
     @Test
