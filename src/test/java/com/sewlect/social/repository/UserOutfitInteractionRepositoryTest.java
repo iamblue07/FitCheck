@@ -9,6 +9,7 @@ import com.sewlect.outfit.enums.OutfitSource;
 import com.sewlect.outfit.repository.OutfitRepository;
 import com.sewlect.social.entity.UserOutfitInteraction;
 import com.sewlect.social.enums.InteractionType;
+import com.sewlect.support.AbstractPostgresIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.hibernate.Hibernate;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +20,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -31,8 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import(JpaAuditingConfig.class)
-@TestPropertySource(properties = "spring.test.database.replace=none")
-class UserOutfitInteractionRepositoryTest {
+class UserOutfitInteractionRepositoryTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private UserOutfitInteractionRepository userOutfitInteractionRepository;
