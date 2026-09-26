@@ -1,6 +1,6 @@
 package com.sewlect.identity.service;
 
-import com.sewlect.common.cache.config.CacheConfig;
+import com.sewlect.identity.config.StyleTagCacheConfig;
 import com.sewlect.identity.dto.StyleTagResponse;
 import com.sewlect.common.taxonomy.repository.StyleTagRepository;
 import lombok.AllArgsConstructor;
@@ -16,7 +16,7 @@ public class StyleTagService {
 
     private final StyleTagRepository styleTagRepository;
 
-    @Cacheable(CacheConfig.STYLE_TAGS_CACHE)
+    @Cacheable(StyleTagCacheConfig.STYLE_TAGS_CACHE)
     @Transactional(readOnly = true)
     public List<StyleTagResponse> listAll() {
         return styleTagRepository.findAll().stream()

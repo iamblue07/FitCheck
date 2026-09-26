@@ -20,12 +20,10 @@ public class RedisRateLimiter implements RateLimiter {
     private static final long WITHIN_LIMIT = 1L;
 
     private final StringRedisTemplate redisTemplate;
-    private final RateLimitSubjectHasher subjectHasher;
     private final DefaultRedisScript<Long> script;
 
-    public RedisRateLimiter(StringRedisTemplate redisTemplate, RateLimitSubjectHasher subjectHasher) {
+    public RedisRateLimiter(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
-        this.subjectHasher = subjectHasher;
         this.script = new DefaultRedisScript<>();
         this.script.setLocation(new ClassPathResource(SCRIPT_LOCATION));
         this.script.setResultType(Long.class);
@@ -33,7 +31,7 @@ public class RedisRateLimiter implements RateLimiter {
 
     @Override
     public boolean tryConsume(String subject, String operationKey, int limit, Duration window) {
-        String key = KEY_PREFIX + operationKey + ":" + subjectHasher.hash(subject);
+        String key = KEY_PREFIX + operationKey + ":" + subject;
         try {
             Long result = redisTemplate.execute(script, List.of(key),
                     String.valueOf(limit), String.valueOf(window.toMillis()));

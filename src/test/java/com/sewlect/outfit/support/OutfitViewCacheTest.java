@@ -1,14 +1,15 @@
 package com.sewlect.outfit.support;
 
-import com.sewlect.common.cache.config.CacheConfig;
 import com.sewlect.common.cache.properties.CacheProperties;
 import com.sewlect.common.cache.support.CacheSwitch;
 import com.sewlect.common.properties.RedisProperties;
 import com.sewlect.common.taxonomy.enums.GarmentRole;
+import com.sewlect.outfit.config.OutfitViewCacheConfig;
 import com.sewlect.outfit.domain.CompatibilityScoreBreakdown;
 import com.sewlect.outfit.domain.OutfitItemView;
 import com.sewlect.outfit.dto.OutfitResponse;
 import com.sewlect.outfit.entity.Outfit;
+import com.sewlect.outfit.properties.OutfitViewCacheProperties;
 import com.sewlect.outfit.service.OutfitItemQueryService;
 import com.sewlect.support.AbstractRedisIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,13 +40,12 @@ class OutfitViewCacheTest extends AbstractRedisIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        CacheProperties cacheProperties = new CacheProperties(true, Duration.ofHours(12), Duration.ofHours(24));
-        CacheSwitch cacheSwitch = new CacheSwitch(cacheProperties, new RedisProperties(true));
+        CacheSwitch cacheSwitch = new CacheSwitch(new CacheProperties(true), new RedisProperties(true));
         RedisTemplate<String, OutfitResponse> template =
-                new CacheConfig().outfitViewRedisTemplate(CONNECTION_FACTORY, JsonMapper.builder().build());
+                new OutfitViewCacheConfig().outfitViewRedisTemplate(CONNECTION_FACTORY, JsonMapper.builder().build());
         template.afterPropertiesSet();
 
-        cache = new OutfitViewCache(template, cacheSwitch, cacheProperties);
+        cache = new OutfitViewCache(template, cacheSwitch, new OutfitViewCacheProperties(Duration.ofHours(12)));
         assembler = new OutfitResponseAssembler(outfitItemQueryService, cache);
     }
 

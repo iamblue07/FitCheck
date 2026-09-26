@@ -30,6 +30,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.json.JsonMapper;
+import com.sewlect.common.security.support.RateLimitSubjectHasher;
 
 import java.util.List;
 
@@ -99,11 +100,12 @@ public class SecurityConfig {
                                                    AuthenticationEntryPoint authenticationEntryPoint,
                                                    AccessDeniedHandler accessDeniedHandler,
                                                    RateLimiter rateLimiter,
+                                                   RateLimitSubjectHasher rateLimitSubjectHasher,
                                                    AuthRateLimitProperties authRateLimitProperties,
                                                    ErrorResponseFactory errorResponseFactory,
                                                    JsonMapper jsonMapper) throws Exception {
         AuthRateLimitFilter authRateLimitFilter = new AuthRateLimitFilter(
-                rateLimiter, authRateLimitProperties, errorResponseFactory, jsonMapper);
+                rateLimiter, rateLimitSubjectHasher, authRateLimitProperties, errorResponseFactory, jsonMapper);
 
         http
                 .csrf(AbstractHttpConfigurer::disable)

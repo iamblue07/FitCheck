@@ -1,8 +1,9 @@
-package com.sewlect.common.ratelimit;
+package com.sewlect.common.security.support;
 
-import com.sewlect.common.properties.RateLimitProperties;
+import com.sewlect.common.security.properties.AuthRateLimitProperties;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,8 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RateLimitSubjectHasherTest {
 
-    private final RateLimitSubjectHasher hasher =
-            new RateLimitSubjectHasher(new RateLimitProperties("test-rate-limit-secret-at-least-32-chars"));
+    private final RateLimitSubjectHasher hasher = new RateLimitSubjectHasher(
+            new AuthRateLimitProperties(20, 10, Duration.ofMinutes(15), "test-rate-limit-secret-at-least-32-chars"));
 
     @Test
     void hash_sameInput_producesTheSameHash() {

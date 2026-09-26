@@ -16,7 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 		"fashn.api-key=test",
 		"ollama.cloud.api-key=test",
 		"deepinfra.api-key=test",
-		"common.ratelimit.subject-hash-secret=test-rate-limit-secret-at-least-32-chars"
+		"auth.rate-limit.subject-hash-secret=test-rate-limit-secret-at-least-32-chars"
 })
 class SewlectApplicationTests extends AbstractPostgresIntegrationTest {
 

@@ -1,8 +1,6 @@
-package com.sewlect.common.ratelimit;
+package com.sewlect.common.security.support;
 
-import com.sewlect.common.properties.RateLimitProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import com.sewlect.common.security.properties.AuthRateLimitProperties;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -12,15 +10,13 @@ import java.security.GeneralSecurityException;
 import java.util.HexFormat;
 
 @Component
-@ConditionalOnProperty(name = "common.redis.enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(RateLimitProperties.class)
 public class RateLimitSubjectHasher {
 
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     private final SecretKeySpec key;
 
-    public RateLimitSubjectHasher(RateLimitProperties properties) {
+    public RateLimitSubjectHasher(AuthRateLimitProperties properties) {
         this.key = new SecretKeySpec(properties.subjectHashSecret().getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM);
     }
 

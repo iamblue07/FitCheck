@@ -1,6 +1,5 @@
 package com.sewlect.common.ratelimit;
 
-import com.sewlect.common.properties.RateLimitProperties;
 import com.sewlect.support.AbstractRedisIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,17 +17,14 @@ import static org.awaitility.Awaitility.await;
 
 class RedisRateLimiterTest extends AbstractRedisIntegrationTest {
 
-    private static final String SECRET = "test-rate-limit-secret-at-least-32-chars";
     private static final String OPERATION_KEY = "outfit-prompt-generation";
     private static final Duration HOUR = Duration.ofHours(1);
 
-    private RateLimitSubjectHasher hasher;
     private RedisRateLimiter rateLimiter;
 
     @BeforeEach
     void setUp() {
-        hasher = new RateLimitSubjectHasher(new RateLimitProperties(SECRET));
-        rateLimiter = new RedisRateLimiter(stringRedisTemplate(), hasher);
+        rateLimiter = new RedisRateLimiter(REDIS_TEMPLATE);
     }
 
     @Test
@@ -81,7 +77,7 @@ class RedisRateLimiterTest extends AbstractRedisIntegrationTest {
                 new RedisStandaloneConfiguration("localhost", unusedPort()));
         unreachable.afterPropertiesSet();
         try {
-            RedisRateLimiter limiter = new RedisRateLimiter(new StringRedisTemplate(unreachable), hasher);
+            RedisRateLimiter limiter = new RedisRateLimiter(new StringRedisTemplate(unreachable));
 
             assertThat(limiter.tryConsume(UUID.randomUUID().toString(), OPERATION_KEY, 1000, HOUR)).isFalse();
         } finally {

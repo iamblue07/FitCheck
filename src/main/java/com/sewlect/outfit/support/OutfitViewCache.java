@@ -1,8 +1,8 @@
 package com.sewlect.outfit.support;
 
-import com.sewlect.common.cache.properties.CacheProperties;
 import com.sewlect.common.cache.support.CacheSwitch;
 import com.sewlect.outfit.dto.OutfitResponse;
+import com.sewlect.outfit.properties.OutfitViewCacheProperties;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisOperations;
@@ -24,7 +24,7 @@ public class OutfitViewCache {
 
     private final RedisTemplate<String, OutfitResponse> outfitViewRedisTemplate;
     private final CacheSwitch cacheSwitch;
-    private final CacheProperties cacheProperties;
+    private final OutfitViewCacheProperties properties;
 
     public Map<UUID, OutfitResponse> getAll(List<UUID> outfitIds) {
         if (!cacheSwitch.isActive() || outfitIds.isEmpty()) {
@@ -59,7 +59,7 @@ public class OutfitViewCache {
                 @Override
                 public <K, V> Object execute(RedisOperations<K, V> operations) {
                     responses.forEach((outfitId, response) -> outfitViewRedisTemplate.opsForValue()
-                            .set(keyFor(outfitId), response, cacheProperties.outfitViewTtl()));
+                            .set(keyFor(outfitId), response, properties.ttl()));
                     return null;
                 }
             });

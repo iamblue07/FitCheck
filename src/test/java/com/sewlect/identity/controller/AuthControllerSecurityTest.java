@@ -1,5 +1,6 @@
 package com.sewlect.identity.controller;
 
+import com.sewlect.common.security.support.RateLimitSubjectHasher;
 import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.security.filter.AuthRateLimitFilter;
 import com.sewlect.common.logging.filter.CorrelationIdFilter;
@@ -41,6 +42,9 @@ class AuthControllerSecurityTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private RateLimitSubjectHasher subjectHasher;
 
     @MockitoBean
     private AuthService authService;
@@ -104,7 +108,7 @@ class AuthControllerSecurityTest {
                 any(), eq(AuthRateLimitFilter.IP_OPERATION_KEY), anyInt(), any(Duration.class)))
                 .thenReturn(true);
         when(inMemoryRateLimiter.tryConsume(
-                eq("valid@example.com"), eq(AuthRateLimitFilter.EMAIL_OPERATION_KEY), anyInt(), any(Duration.class)))
+                eq(subjectHasher.hash("valid@example.com")), eq(AuthRateLimitFilter.EMAIL_OPERATION_KEY), anyInt(), any(Duration.class)))
                 .thenReturn(false);
 
         String body = """

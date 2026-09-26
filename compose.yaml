@@ -5,9 +5,8 @@ services:
       POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      ports: "127.0.0.1:6379:6379"
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -30,6 +29,8 @@ services:
       - allkeys-lru
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -89,7 +90,8 @@ services:
           echo "No seed/catalog.dump found - leaving the catalog empty"
           exit 0
         fi
-        if [ "$$(psql -tAc 'SELECT count(*) FROM products')" != "0" ]; then
+        count=$$(psql -v ON_ERROR_STOP=1 -tAc 'SELECT count(*) FROM products')
+        if [ "$$count" != "0" ]; then
           echo "products already has rows - skipping the restore"
           exit 0
         fi

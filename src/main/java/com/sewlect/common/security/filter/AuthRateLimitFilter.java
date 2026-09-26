@@ -18,6 +18,7 @@ import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
+import com.sewlect.common.security.support.RateLimitSubjectHasher;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -39,15 +40,18 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             "Too many authentication attempts - try again later";
 
     private final RateLimiter rateLimiter;
+    private final RateLimitSubjectHasher subjectHasher;
     private final AuthRateLimitProperties properties;
     private final ErrorResponseFactory errorResponseFactory;
     private final JsonMapper jsonMapper;
 
     public AuthRateLimitFilter(RateLimiter rateLimiter,
+                               RateLimitSubjectHasher subjectHasher,
                                AuthRateLimitProperties properties,
                                ErrorResponseFactory errorResponseFactory,
                                JsonMapper jsonMapper) {
         this.rateLimiter = rateLimiter;
+        this.subjectHasher = subjectHasher;
         this.properties = properties;
         this.errorResponseFactory = errorResponseFactory;
         this.jsonMapper = jsonMapper;
@@ -63,7 +67,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!rateLimiter.tryConsume(resolveClientIp(request), IP_OPERATION_KEY,
+        if (!rateLimiter.tryConsume(subjectHasher.hash(resolveClientIp(request)), IP_OPERATION_KEY,
                 properties.perIpLimit(), properties.window())) {
             reject(request, response);
             return;
@@ -77,7 +81,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
         String email = extractEmail(body);
 
-        if (email != null && !rateLimiter.tryConsume(email, EMAIL_OPERATION_KEY,
+        if (email != null && !rateLimiter.tryConsume(subjectHasher.hash(email), EMAIL_OPERATION_KEY,
                 properties.perEmailLimit(), properties.window())) {
             reject(request, response);
             return;

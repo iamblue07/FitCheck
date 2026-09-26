@@ -1,5 +1,6 @@
 package com.sewlect.support;
 
+import com.sewlect.common.security.support.RateLimitSubjectHasher;
 import com.sewlect.common.exception.support.ErrorResponseFactory;
 import com.sewlect.common.ratelimit.InMemoryRateLimiter;
 import com.sewlect.common.ratelimit.RateLimiter;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.mock;
 @Import({SecurityConfig.class, JwtConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 public class WebSliceTestConfig {
 
+    public static final String TEST_SUBJECT_HASH_SECRET = "test-rate-limit-secret-at-least-32-chars";
     public static final String TEST_JWT_SECRET = "test-secret-key-at-least-32-characters-long-xxxx";
     public static final String TEST_ISSUER = "https://sewlect.local";
     public static final String TEST_AUDIENCE = "sewlect-api";
@@ -57,9 +59,15 @@ public class WebSliceTestConfig {
     public RateLimiter rateLimiter(Clock clock) {
         return new InMemoryRateLimiter(clock);
     }
+
     @Bean
     public AuthRateLimitProperties authRateLimitProperties() {
-        return new AuthRateLimitProperties(20, 10, Duration.ofMinutes(15));
+        return new AuthRateLimitProperties(20, 10, Duration.ofMinutes(15), TEST_SUBJECT_HASH_SECRET);
+    }
+
+    @Bean
+    public RateLimitSubjectHasher rateLimitSubjectHasher(AuthRateLimitProperties authRateLimitProperties) {
+        return new RateLimitSubjectHasher(authRateLimitProperties);
     }
 
     @Bean
