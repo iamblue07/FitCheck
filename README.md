@@ -20,17 +20,20 @@ Sewlect recommends outfits assembled from a real product catalog, matched to a u
 
 | Layer | Choice |
 |---|---|
-| Backend | Java 21+, Spring Boot 4.1+, Maven |
-| Database | PostgreSQL 18 + `pgvector` — native install locally, [Aiven](https://aiven.io) free tier for hosting; nearest-neighbor retrieval via Spring Data JPA's native vector search, backed by an HNSW index on `products.text_embedding` |
+| Backend | Java 25, Spring Boot 4.1, Maven (wrapper included) |
+| Database | PostgreSQL 18 + `pgvector` — Docker locally, [Aiven](https://aiven.io) free tier for hosting; nearest-neighbor retrieval via Spring Data JPA's native vector search, backed by an HNSW index on `products.text_embedding` |
 | Migrations | Flyway — `ddl-auto=validate`, so the schema is always migration-driven |
-| Security | Spring Security resource server — HS256 JWTs with `iss`/`aud` validation, DB-backed rotating refresh tokens, per-IP and per-email rate limiting on the auth endpoints |
+| Shared state | Redis 8 — distributed rate limiting, background-job coordination, and caching of outfit views and the style-tag list; optional, with in-memory fallbacks |
+| Security | Spring Security resource server — HS256 JWTs with `iss`/`aud` validation, DB-backed rotating refresh tokens, per-IP and per-email rate limiting on the auth endpoints with pseudonymised (HMAC) keys |
 | AI — catalog | Ollama running Qwen3-VL 4B (enrichment) and Qwen3-Embedding-4B (embeddings) locally, one-time batch jobs |
 | AI — prompts | Ollama Cloud for structured extraction (`gpt-oss:20b-cloud` by default); DeepInfra for query-time embeddings against the same open-weight model the catalog uses, so no catalog re-embed was needed |
 | AI — try-on | [FASHN AI](https://fashn.ai) — `tryon-v1.6` for tops/bottoms/full-body, `tryon-max` for footwear/accessories |
 | Storage | Cloudflare R2 (S3-compatible, zero egress) for user photos and generated try-on images |
 | API docs | springdoc OpenAPI — `/swagger-ui.html`, importable into Postman from `/v3/api-docs` |
 | Frontend | Flutter (not started — begins once the backend, minus Commerce, is complete) |
-| Testing | JUnit 5 + Mockito (automated); `@DataJpaTest` repository tests need a real Postgres with `pgvector`; Postman/Swagger against a real Aiven database (manual) |
+| Containers | Multi-stage, multi-architecture (`amd64`/`arm64`) Docker image; Docker Compose for the local stack |
+| CI/CD | GitHub Actions — tests on every push to `master` and every pull request; images published to GitHub Container Registry |
+| Testing | JUnit 5 + Mockito; integration tests against real Postgres and Redis via Testcontainers; Postman/Swagger for manual testing |
 | Dev environment | Windows, IntelliJ IDEA |
 
 ## API overview
@@ -71,19 +74,19 @@ Within a feature package, subfolders are typed strictly by what they actually ho
 | `repository` | Repository interfaces |
 | `controller` | `@RestController` classes |
 | `config` | `@Configuration` classes |
-| `properties` | `@ConfigurationProperties` records — split out of `config` since a bean-declaring class and a properties record are different things |
+| `properties` | `@ConfigurationProperties` records |
 | `pipeline` | `CommandLineRunner` and scheduled batch-job classes (established in `catalog`, reused wherever else it recurs) |
 | `filter` | Servlet filters |
 | `annotation` | Meta-annotations |
 | `openapi` | springdoc configuration and the annotations built on it |
 
-A feature only gets the subfolders it actually needs — `outfit` has no `@Configuration` class at all, so it has `properties` and no `config`.
+A feature only gets the subfolders it actually needs.
 
-`common`'s own submodules (`security`, `storage`, `taxonomy`, `ai`, `logging`, `exception`, `openapi`) follow the same typing once they've grown enough to mix layer-types; `ratelimit` and the un-split part of `persistence` haven't, and don't need it forced on them.
+`common`'s own submodules (`security`, `storage`, `taxonomy`, `ai`, `logging`, `exception`, `openapi`, `cache`) follow the same typing once they've grown enough to mix layer-types.
 
-What belongs in `common` isn't decided by who currently calls it — it's decided by what the thing *is*. Connection-level infrastructure for a shared external resource (an AI provider's base URL, API key, HTTP client tuning) stays `common` even with one current caller, since any future feature needing that provider would reuse the same wiring rather than redeclare it; what a feature actually *does* with that access stays in the feature. `OllamaCloudConfig`, `DeepInfraEmbeddingConfig`, and `FashnConfig` (plus their properties) all live in `common.ai.config`/`common.ai.properties` on that basis, even though each currently has exactly one caller.
+What belongs in `common` isn't decided by who currently calls it but by who might *theoretically* need it later. Connection-level infrastructure for a shared external resource (an AI provider's base URL, API key, HTTP client tuning) stays `common` even with one current caller, since any future feature needing that provider would reuse the same wiring rather than redeclare it; what a feature actually *does* with that access stays in the feature. `OllamaCloudConfig`, `DeepInfraEmbeddingConfig`, and `FashnConfig` (plus their properties) all live in `common.ai.config`/`common.ai.properties` on that basis, even though each currently has exactly one caller.
 
-Cross-feature reads go through a narrow, feature-owned query facade (e.g. `catalog.service.ProductSearchService`, `identity.service.UserReferenceQueryService`) rather than one feature injecting another's repository directly.
+Cross-feature reads go through a narrow, feature-owned query facade (e.g. `catalog.service.ProductSearchService`, `identity.service.UserReferenceQueryService`) rather than one feature injecting another's repository directly. Dependencies point one way: features depend on `common`, never the reverse. For example, a feature that wants a Redis cache contributes its own cache definition rather than `common` knowing about it.
 
 ## Status
 
@@ -103,19 +106,35 @@ Cross-feature reads go through a narrow, feature-owned query facade (e.g. `catal
 | 11 | FASHN AI Integration & Async Job Pipeline | ✅ Done |
 | 12 | Likes, Saves & Shares | ✅ Done |
 | 13 | Logging, Security & API Documentation Audit | ✅ Done |
-| 14 | Build & Deployment Pipeline | ⬜ Not started |
+| 14.1 | Containerization & CI | ✅ Done |
+| 14.2 | Shared State with Redis | ✅ Done |
+| 14.3 | Deployment | ⬜ Next |
 | 15+ | Frontend (Flutter) | ⬜ Not started |
 | 16 | Orders & Checkout (post-frontend) | ⬜ Not started |
 
-The application runs as a single instance by design — rate limiting, the feed refill guard and the try-on stale-job sweeper are all in-memory, traded deliberately against having no Redis dependency.
+Rate limiting and background-job coordination live in Redis, so they hold across multiple instances and survive restarts. The deployment target is a single ARM VM running the application and Redis under Docker Compose, with Postgres on Aiven.
 
 ## Getting started
 
-**Prerequisites:** JDK 21+, Maven, PostgreSQL 17+ with `pgvector`, [Ollama](https://ollama.com) with `qwen3-vl:4b` and `qwen3-embedding:4b` pulled locally, an [Ollama Cloud](https://ollama.com/cloud) API key, a [DeepInfra](https://deepinfra.com) API key, a [FASHN AI](https://fashn.ai) API key, IntelliJ IDEA (recommended).
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Compose), plus API credentials for [Cloudflare R2](https://developers.cloudflare.com/r2/), [Ollama Cloud](https://ollama.com/cloud), [DeepInfra](https://deepinfra.com) and [FASHN AI](https://fashn.ai). A JDK 25 and IntelliJ IDEA are only needed to run or debug the application outside Docker.
 
-1. Clone the repo.
-2. Create an untracked `.env.local` at the project root with your local Postgres connection details, Cloudflare R2 and JWT settings, the local Ollama/catalog batch variables, and the AI-provider keys (`OLLAMA_CLOUD_API_KEY`, `DEEPINFRA_API_KEY`, `FASHN_API_KEY`) — see `application.properties` for the full list. `JWT_SECRET` must be at least 32 characters, or the application refuses to start. `CORS_ALLOWED_ORIGINS` is empty by default and only needs setting for a browser-based client.
-3. Make sure your database user can `CREATE EXTENSION` — Flyway's `V0` enables `pgvector`. Everything else in the schema is created automatically on first boot.
-4. Make sure Ollama is running locally with both models pulled (only needed for the one-time catalog load, enrichment and embedding passes — the running application never calls local Ollama).
-5. Run from IntelliJ, or `mvn spring-boot:run`.
-6. Confirm it's up: `GET http://localhost:8080/actuator/health` → `{"status":"UP"}`. Everything else under `/actuator/**` requires the `ADMIN` role.
+1. Clone the repository.
+2. Copy `.env.example` to `.env.local` and fill in the empty values. Every variable the application reads is listed there; non-secrets already have working defaults. `JWT_SECRET` and `RATE_LIMIT_HASH_SECRET` must each be at least 32 characters, or the application refuses to start.
+3. Start the stack:
+   ```
+   docker compose --env-file .env.local up -d --build
+   ```
+   This builds the image and starts Postgres (with `pgvector`), Redis and the application. Flyway creates the schema on first start.
+4. Optionally load the product catalog: download `catalog.dump` from the [`catalog-seed-v1` release](https://github.com/iamblue07/Sewlect/releases/tag/catalog-seed-v1) into a `seed/` folder at the project root, then run
+   ```
+   docker compose --env-file .env.local --profile seed up seed
+   ```
+   The seed only runs against an empty catalog.
+5. Confirm it's up: `GET http://localhost:8080/actuator/health` → `{"status":"UP"}`. API documentation is at `http://localhost:8080/swagger-ui.html`. Everything else under `/actuator/**` requires the `ADMIN` role.
+6. Stop with `docker compose --env-file .env.local down`. Data is kept in named volumes.
+
+**Alternatively,running from the IDE.** Start only the backing services with `docker compose --env-file .env.local up -d postgres redis` (both are published on `localhost` only), then run `SewlectApplication` from IntelliJ. `.env.local` is picked up automatically. Setting `REDIS_ENABLED=false` runs the application without Redis, using in-memory rate limiting and no caching.
+
+**Tests.** `./mvnw verify` (or `mvnw.cmd verify` on Windows) runs the full suite. Docker must be running: Postgres and Redis are started automatically by Testcontainers.
+
+**Catalog pipelines.** Enrichment and embedding of the raw dataset are one-time batch jobs that need a local [Ollama](https://ollama.com) with `qwen3-vl:4b` and `qwen3-embedding:4b`. They are not needed to run the application, and are switched off by default. The catalog dump contains both enriched data and embeddings.
