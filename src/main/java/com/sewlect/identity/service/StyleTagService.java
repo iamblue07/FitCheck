@@ -1,8 +1,10 @@
 package com.sewlect.identity.service;
 
+import com.sewlect.common.cache.config.CacheConfig;
 import com.sewlect.identity.dto.StyleTagResponse;
 import com.sewlect.common.taxonomy.repository.StyleTagRepository;
 import lombok.AllArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ public class StyleTagService {
 
     private final StyleTagRepository styleTagRepository;
 
+    @Cacheable(CacheConfig.STYLE_TAGS_CACHE)
     @Transactional(readOnly = true)
     public List<StyleTagResponse> listAll() {
         return styleTagRepository.findAll().stream()

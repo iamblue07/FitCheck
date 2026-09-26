@@ -12,9 +12,9 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class FeedRefillGuardTest {
+class InMemoryFeedRefillGuardTest {
 
-    private final FeedRefillGuard guard = new FeedRefillGuard();
+    private final InMemoryFeedRefillGuard guard = new InMemoryFeedRefillGuard();
 
     @Test
     void tryClaim_firstClaimForUser_succeeds() {
@@ -46,7 +46,6 @@ class FeedRefillGuardTest {
 
         assertThat(guard.tryClaim(userA)).isTrue();
         assertThat(guard.tryClaim(userB)).isTrue();
-        // userA still claimed, doesn't leak into userB's slot
         assertThat(guard.tryClaim(userA)).isFalse();
     }
 
@@ -55,7 +54,7 @@ class FeedRefillGuardTest {
         assertThat(guard.tryClaim(UUID.randomUUID())).isTrue();
         UUID neverClaimed = UUID.randomUUID();
 
-        guard.release(neverClaimed); // must not throw
+        guard.release(neverClaimed);
 
         assertThat(guard.tryClaim(neverClaimed)).isTrue();
     }
@@ -66,7 +65,7 @@ class FeedRefillGuardTest {
         guard.tryClaim(userId);
 
         guard.release(userId);
-        guard.release(userId); // must not throw, must not corrupt state
+        guard.release(userId);
 
         assertThat(guard.tryClaim(userId)).isTrue();
     }
@@ -94,7 +93,7 @@ class FeedRefillGuardTest {
                 });
             }
 
-            startGate.countDown(); // release all threads at once to maximize contention
+            startGate.countDown();
             boolean completed = doneLatch.await(5, TimeUnit.SECONDS);
 
             assertThat(completed).isTrue();

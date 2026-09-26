@@ -62,7 +62,7 @@ class FeedGenerationServiceTest {
     @Mock
     private AsyncTaskExecutor feedRefillExecutor;
 
-    private final FeedProperties feedProperties = new FeedProperties(20, 30);
+    private final FeedProperties feedProperties = new FeedProperties(20, 30, 300000);
 
     private FeedGenerationService service;
 

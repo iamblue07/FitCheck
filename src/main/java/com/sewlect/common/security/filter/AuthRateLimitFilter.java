@@ -3,7 +3,7 @@ package com.sewlect.common.security.filter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.sewlect.common.exception.dto.ErrorResponse;
 import com.sewlect.common.exception.support.ErrorResponseFactory;
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.security.properties.AuthRateLimitProperties;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
@@ -38,12 +38,12 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final String REJECTION_MESSAGE =
             "Too many authentication attempts - try again later";
 
-    private final InMemoryRateLimiter rateLimiter;
+    private final RateLimiter rateLimiter;
     private final AuthRateLimitProperties properties;
     private final ErrorResponseFactory errorResponseFactory;
     private final JsonMapper jsonMapper;
 
-    public AuthRateLimitFilter(InMemoryRateLimiter rateLimiter,
+    public AuthRateLimitFilter(RateLimiter rateLimiter,
                                AuthRateLimitProperties properties,
                                ErrorResponseFactory errorResponseFactory,
                                JsonMapper jsonMapper) {

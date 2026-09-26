@@ -2,7 +2,7 @@ package com.sewlect.common.security.config;
 
 import com.sewlect.common.exception.support.ErrorResponseFactory;
 import com.sewlect.common.logging.filter.CorrelationIdFilter;
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.security.filter.AuthRateLimitFilter;
 import com.sewlect.common.security.properties.AuthRateLimitProperties;
 import com.sewlect.common.security.properties.CorsProperties;
@@ -98,12 +98,12 @@ public class SecurityConfig {
                                                    JwtAuthenticationConverter jwtAuthenticationConverter,
                                                    AuthenticationEntryPoint authenticationEntryPoint,
                                                    AccessDeniedHandler accessDeniedHandler,
-                                                   InMemoryRateLimiter inMemoryRateLimiter,
+                                                   RateLimiter rateLimiter,
                                                    AuthRateLimitProperties authRateLimitProperties,
                                                    ErrorResponseFactory errorResponseFactory,
                                                    JsonMapper jsonMapper) throws Exception {
         AuthRateLimitFilter authRateLimitFilter = new AuthRateLimitFilter(
-                inMemoryRateLimiter, authRateLimitProperties, errorResponseFactory, jsonMapper);
+                rateLimiter, authRateLimitProperties, errorResponseFactory, jsonMapper);
 
         http
                 .csrf(AbstractHttpConfigurer::disable)

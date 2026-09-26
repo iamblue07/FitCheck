@@ -4,7 +4,7 @@ import com.sewlect.catalog.entity.Product;
 import com.sewlect.common.exception.BadRequestException;
 import com.sewlect.common.exception.RateLimitExceededException;
 import com.sewlect.common.exception.ResourceNotFoundException;
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.storage.service.StorageService;
 import com.sewlect.identity.entity.User;
 import com.sewlect.identity.enums.PhotoType;
@@ -44,7 +44,7 @@ public class TryonRequestService {
             Set.of(TryonRequestStatus.PENDING, TryonRequestStatus.PROCESSING);
 
     private final OutfitItemQueryService outfitItemQueryService;
-    private final InMemoryRateLimiter inMemoryRateLimiter;
+    private final RateLimiter rateLimiter;
     private final TryonPersistenceService tryonPersistenceService;
     private final TryonRequestRepository tryonRequestRepository;
     private final UserReferenceQueryService userReferenceQueryService;
@@ -85,7 +85,7 @@ public class TryonRequestService {
             return getStatus(userId, existing.getId());
         }
 
-        boolean consumed = inMemoryRateLimiter.tryConsume(
+        boolean consumed = rateLimiter.tryConsume(
                 userId.toString(), RATE_LIMIT_OPERATION_KEY, properties.rateLimitPerHour(), Duration.ofHours(1));
         if (!consumed) {
             throw new RateLimitExceededException("Rate limit exceeded for this operation - try again later");

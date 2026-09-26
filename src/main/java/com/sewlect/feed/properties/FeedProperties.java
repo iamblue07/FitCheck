@@ -8,6 +8,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "feed")
 public record FeedProperties(
         @Positive int pageSize,
-        @Positive int refillThreshold
+        @Positive int refillThreshold,
+        @Positive long refillLockTtlMs
 ) {
 }

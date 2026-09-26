@@ -3,7 +3,7 @@ package com.sewlect.outfit.controller;
 import com.sewlect.common.exception.RateLimitExceededException;
 import com.sewlect.common.exception.dto.ErrorResponse;
 import com.sewlect.common.openapi.annotation.StandardApiErrors;
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.identity.entity.User;
 import com.sewlect.identity.service.UserReferenceQueryService;
 import com.sewlect.outfit.dto.AlternativeCandidateResponse;
@@ -44,7 +44,7 @@ public class PromptController {
 
     private final PromptOutfitGenerationService promptOutfitGenerationService;
     private final PromptRefinementService promptRefinementService;
-    private final InMemoryRateLimiter inMemoryRateLimiter;
+    private final RateLimiter rateLimiter;
     private final PromptRateLimitResolver promptRateLimitResolver;
     private final UserReferenceQueryService userReferenceQueryService;
 
@@ -82,7 +82,7 @@ public class PromptController {
     private void enforceRateLimit(UUID userId, String operationKey) {
         User user = userReferenceQueryService.getById(userId);
         int limit = promptRateLimitResolver.resolveLimit(user);
-        boolean consumed = inMemoryRateLimiter.tryConsume(userId.toString(), operationKey, limit, Duration.ofHours(1));
+        boolean consumed = rateLimiter.tryConsume(userId.toString(), operationKey, limit, Duration.ofHours(1));
         if (!consumed) {
             throw new RateLimitExceededException("Rate limit exceeded for this operation - try again later");
         }

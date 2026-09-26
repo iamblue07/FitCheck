@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.sewlect.outfit.support.OutfitViewCache;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,11 +31,14 @@ class OutfitResponseAssemblerTest {
     @Mock
     private OutfitItemQueryService outfitItemQueryService;
 
+    @Mock
+    private OutfitViewCache outfitViewCache;
+
     private OutfitResponseAssembler assembler;
 
     @BeforeEach
     void setUp() {
-        assembler = new OutfitResponseAssembler(outfitItemQueryService);
+        assembler = new OutfitResponseAssembler(outfitItemQueryService, outfitViewCache);
     }
 
     @Test

@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,13 +19,22 @@ import java.util.UUID;
 public class OutfitResponseAssembler {
 
     private final OutfitItemQueryService outfitItemQueryService;
+    private final OutfitViewCache outfitViewCache;
 
     public OutfitResponse toResponse(Outfit outfit) {
-        return new OutfitResponse(
-                outfit.getId(),
+        UUID outfitId = outfit.getId();
+        OutfitResponse cached = outfitViewCache.getAll(List.of(outfitId)).get(outfitId);
+        if (cached != null) {
+            return cached;
+        }
+
+        OutfitResponse assembled = new OutfitResponse(
+                outfitId,
                 toBreakdown(outfit),
-                outfitItemQueryService.sumBasePrice(outfit.getId()),
-                outfitItemQueryService.findItemViews(outfit.getId()));
+                outfitItemQueryService.sumBasePrice(outfitId),
+                outfitItemQueryService.findItemViews(outfitId));
+        outfitViewCache.putAll(Map.of(outfitId, assembled));
+        return assembled;
     }
 
     public List<OutfitResponse> toResponses(List<Outfit> outfits) {
@@ -33,16 +43,39 @@ public class OutfitResponseAssembler {
         }
 
         List<UUID> outfitIds = outfits.stream().map(Outfit::getId).toList();
+        Map<UUID, OutfitResponse> cached = outfitViewCache.getAll(outfitIds);
+
+        List<Outfit> misses = outfits.stream()
+                .filter(outfit -> !cached.containsKey(outfit.getId()))
+                .toList();
+        Map<UUID, OutfitResponse> assembled = assemble(misses);
+        outfitViewCache.putAll(assembled);
+
+        return outfits.stream()
+                .map(outfit -> cached.containsKey(outfit.getId())
+                        ? cached.get(outfit.getId())
+                        : assembled.get(outfit.getId()))
+                .toList();
+    }
+
+    private Map<UUID, OutfitResponse> assemble(List<Outfit> outfits) {
+        if (outfits.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UUID> outfitIds = outfits.stream().map(Outfit::getId).toList();
         Map<UUID, List<OutfitItemView>> itemViewsByOutfitId = outfitItemQueryService.findItemViewsForOutfits(outfitIds);
         Map<UUID, BigDecimal> totalPriceByOutfitId = outfitItemQueryService.sumBasePriceForOutfits(outfitIds);
 
-        return outfits.stream()
-                .map(outfit -> new OutfitResponse(
-                        outfit.getId(),
-                        toBreakdown(outfit),
-                        totalPriceByOutfitId.get(outfit.getId()),
-                        itemViewsByOutfitId.get(outfit.getId())))
-                .toList();
+        Map<UUID, OutfitResponse> assembled = new HashMap<>();
+        for (Outfit outfit : outfits) {
+            assembled.put(outfit.getId(), new OutfitResponse(
+                    outfit.getId(),
+                    toBreakdown(outfit),
+                    totalPriceByOutfitId.get(outfit.getId()),
+                    itemViewsByOutfitId.get(outfit.getId())));
+        }
+        return assembled;
     }
 
     private CompatibilityScoreBreakdown toBreakdown(Outfit outfit) {

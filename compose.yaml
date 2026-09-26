@@ -5,6 +5,7 @@ services:
       POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      ports: "127.0.0.1:6379:6379"
     ports:
       - "5432:5432"
     volumes:
@@ -32,7 +33,7 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: [ "CMD-SHELL", "redis-cli ping | grep -q PONG" ]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -56,6 +57,48 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3 && grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  seed:
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    profiles: ["seed"]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${DB_NAME:?DB_NAME is required}
+      PGUSER: ${DB_USER:?DB_USER is required}
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - ./seed:/seed:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    entrypoint: ["bash", "-ec"]
+    command:
+      - |
+        if [ ! -f /seed/catalog.dump ]; then
+          echo "No seed/catalog.dump found - leaving the catalog empty"
+          exit 0
+        fi
+        if [ "$$(psql -tAc 'SELECT count(*) FROM products')" != "0" ]; then
+          echo "products already has rows - skipping the restore"
+          exit 0
+        fi
+        psql -v ON_ERROR_STOP=1 -c 'DELETE FROM style_tags'
+        for table in style_tags products product_variants product_style_tags; do
+          echo "Restoring $$table"
+          pg_restore --data-only --no-owner --no-privileges --exit-on-error -d "$$PGDATABASE" -t "$$table" /seed/catalog.dump
+        done
+        echo "Catalog seed complete"
 
 volumes:
   postgres-data:

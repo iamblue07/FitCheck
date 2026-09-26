@@ -191,6 +191,12 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!--For Redis -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+
 		<!-- For Deployment -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

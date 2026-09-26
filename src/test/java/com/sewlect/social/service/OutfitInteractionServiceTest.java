@@ -24,6 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import com.sewlect.outfit.support.OutfitViewCache;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -52,6 +53,9 @@ class OutfitInteractionServiceTest {
     private OutfitItemQueryService outfitItemQueryService;
 
     @Mock
+    private OutfitViewCache outfitViewCache;
+
+    @Mock
     private UserReferenceQueryService userReferenceQueryService;
 
     private OutfitResponseAssembler outfitResponseAssembler;
@@ -60,7 +64,7 @@ class OutfitInteractionServiceTest {
 
     @BeforeEach
     void setUp() {
-        outfitResponseAssembler = new OutfitResponseAssembler(outfitItemQueryService);
+        outfitResponseAssembler = new OutfitResponseAssembler(outfitItemQueryService, outfitViewCache);
         service = new OutfitInteractionService(
                 userOutfitInteractionRepository, outfitItemQueryService, outfitResponseAssembler,
                 userReferenceQueryService);

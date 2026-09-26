@@ -1,6 +1,7 @@
 package com.sewlect.common.ratelimit;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
-public class InMemoryRateLimiter {
+@ConditionalOnProperty(name = "common.redis.enabled", havingValue = "false")
+public class InMemoryRateLimiter implements RateLimiter {
 
     private final Map<RateLimitKey, WindowState> windows = new ConcurrentHashMap<>();
     private final Clock clock;
@@ -22,6 +24,7 @@ public class InMemoryRateLimiter {
         this.clock = clock;
     }
 
+    @Override
     public boolean tryConsume(String subject, String operationKey, int limit, Duration window) {
         RateLimitKey key = new RateLimitKey(subject, operationKey);
         Instant now = clock.instant();
