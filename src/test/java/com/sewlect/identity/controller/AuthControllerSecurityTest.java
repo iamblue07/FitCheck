@@ -1,6 +1,6 @@
 package com.sewlect.identity.controller;
 
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.security.filter.AuthRateLimitFilter;
 import com.sewlect.common.logging.filter.CorrelationIdFilter;
 import com.sewlect.identity.service.AuthService;
@@ -46,7 +46,7 @@ class AuthControllerSecurityTest {
     private AuthService authService;
 
     @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
+    private RateLimiter inMemoryRateLimiter;
 
     @Test
     void protectedEndpoint_missingAuthorizationHeader_returns401InErrorResponseShape() throws Exception {

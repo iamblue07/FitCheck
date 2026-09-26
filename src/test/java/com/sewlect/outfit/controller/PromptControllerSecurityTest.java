@@ -1,6 +1,6 @@
 package com.sewlect.outfit.controller;
 
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.identity.enums.Role;
 import com.sewlect.identity.entity.User;
 import com.sewlect.identity.service.UserReferenceQueryService;
@@ -50,7 +50,7 @@ class PromptControllerSecurityTest {
     private PromptRefinementService promptRefinementService;
 
     @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
+    private RateLimiter inMemoryRateLimiter;
 
     @MockitoBean
     private PromptRateLimitResolver promptRateLimitResolver;

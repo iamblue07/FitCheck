@@ -1,6 +1,6 @@
 package com.sewlect.outfit.controller;
 
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.identity.service.UserReferenceQueryService;
 import com.sewlect.outfit.service.PromptOutfitGenerationService;
 import com.sewlect.outfit.support.PromptRateLimitResolver;
@@ -43,7 +43,7 @@ class PromptControllerTest {
     private PromptRefinementService promptRefinementService;
 
     @MockitoBean
-    private InMemoryRateLimiter inMemoryRateLimiter;
+    private RateLimiter inMemoryRateLimiter;
 
     @MockitoBean
     private PromptRateLimitResolver promptRateLimitResolver;

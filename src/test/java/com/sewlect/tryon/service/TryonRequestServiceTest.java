@@ -4,7 +4,7 @@ import com.sewlect.catalog.entity.Product;
 import com.sewlect.common.exception.BadRequestException;
 import com.sewlect.common.exception.RateLimitExceededException;
 import com.sewlect.common.exception.ResourceNotFoundException;
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.storage.service.StorageService;
 import com.sewlect.identity.entity.User;
 import com.sewlect.identity.enums.PhotoType;
@@ -64,7 +64,7 @@ class TryonRequestServiceTest {
     @Mock
     private OutfitItemQueryService outfitItemQueryService;
     @Mock
-    private InMemoryRateLimiter inMemoryRateLimiter;
+    private RateLimiter inMemoryRateLimiter;
     @Mock
     private TryonPersistenceService tryonPersistenceService;
     @Mock

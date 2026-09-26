@@ -2,6 +2,7 @@ package com.sewlect.support;
 
 import com.sewlect.common.exception.support.ErrorResponseFactory;
 import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.security.config.JwtConfig;
 import com.sewlect.common.security.config.SecurityConfig;
 import com.sewlect.common.security.handler.RestAccessDeniedHandler;
@@ -53,10 +54,9 @@ public class WebSliceTestConfig {
     }
 
     @Bean
-    public InMemoryRateLimiter inMemoryRateLimiter(Clock clock) {
+    public RateLimiter rateLimiter(Clock clock) {
         return new InMemoryRateLimiter(clock);
     }
-
     @Bean
     public AuthRateLimitProperties authRateLimitProperties() {
         return new AuthRateLimitProperties(20, 10, Duration.ofMinutes(15));

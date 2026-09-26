@@ -1,7 +1,7 @@
 package com.sewlect.common.security.filter;
 
 import com.sewlect.common.exception.support.ErrorResponseFactory;
-import com.sewlect.common.ratelimit.InMemoryRateLimiter;
+import com.sewlect.common.ratelimit.RateLimiter;
 import com.sewlect.common.security.properties.AuthRateLimitProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,7 +36,7 @@ class AuthRateLimitFilterTest {
     private static final Duration WINDOW = Duration.ofMinutes(15);
 
     @Mock
-    private InMemoryRateLimiter rateLimiter;
+    private RateLimiter rateLimiter;
 
     private AuthRateLimitFilter filter;
 
