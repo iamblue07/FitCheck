@@ -27,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         WebSliceTestConfig.JWT_SECRET_PROPERTY,
         WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
         WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.SUBJECT_HASH_SECRET_PROPERTY,
         "spring.ai.model.chat=ollama"
 })
 class AdminCatalogControllerTest {

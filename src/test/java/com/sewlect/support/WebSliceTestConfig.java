@@ -44,6 +44,8 @@ public class WebSliceTestConfig {
     public static final String JWT_SECRET_PROPERTY = "jwt.secret=" + TEST_JWT_SECRET;
     public static final String JWT_ACCESS_EXPIRATION_PROPERTY = "jwt.access-expiration=900000";
     public static final String JWT_REFRESH_EXPIRATION_PROPERTY = "jwt.refresh-expiration=604800000";
+    public static final String SUBJECT_HASH_SECRET_PROPERTY =
+            "auth.rate-limit.subject-hash-secret=" + TEST_SUBJECT_HASH_SECRET;
 
     @Bean
     public Clock clock() {

@@ -34,7 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
         WebSliceTestConfig.JWT_SECRET_PROPERTY,
         WebSliceTestConfig.JWT_ACCESS_EXPIRATION_PROPERTY,
-        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY
+        WebSliceTestConfig.JWT_REFRESH_EXPIRATION_PROPERTY,
+        WebSliceTestConfig.SUBJECT_HASH_SECRET_PROPERTY
 })
 class GarmentSwapControllerSecurityTest {
 
